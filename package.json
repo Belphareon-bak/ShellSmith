@@ -1,0 +1,83 @@
+{
+  "name": "c3term",
+  "productName": "C3Term",
+  "version": "1.0.0",
+  "description": "Profesionální SSH/SFTP terminál s adresářovým stromem, taby a multi-session správou",
+  "main": "src/main/main.js",
+  "author": "Belphareon",
+  "license": "MIT",
+  "scripts": {
+    "build:renderer": "node scripts/build-renderer.mjs",
+    "watch:renderer": "node scripts/build-renderer.mjs --watch",
+    "postinstall": "electron-rebuild -f -w node-pty || true",
+    "start": "npm run build:renderer && electron .",
+    "dev": "npm run build:renderer && electron . --dev",
+    "dist": "npm run build:renderer && electron-builder --linux AppImage",
+    "dist:deb": "npm run build:renderer && electron-builder --linux deb"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-search": "^0.15.0",
+    "@xterm/addon-unicode11": "^0.8.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/addon-webgl": "^0.18.0",
+    "@xterm/xterm": "^5.5.0",
+    "node-pty": "^1.0.0",
+    "ssh2": "^1.16.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
+    "electron": "37.2.1",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.0"
+  },
+  "build": {
+    "appId": "cz.belphareon.c3term",
+    "productName": "C3Term",
+    "copyright": "© 2026 Belphareon",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "!src/renderer/js/**",
+      "package.json",
+      "!**/*.map"
+    ],
+    "extraMetadata": {
+      "main": "src/main/main.js"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network;RemoteAccess;System;TerminalEmulator",
+      "icon": "build/icons",
+      "synopsis": "SSH a SFTP terminál s adresářovým stromem",
+      "description": "Terminálový klient s adresářovým stromem, taby, rozdělenými panely a přenosem souborů přes SFTP.",
+      "desktop": {
+        "entry": {
+          "Name": "C3Term",
+          "GenericName": "SSH a SFTP terminál",
+          "Keywords": "ssh;sftp;terminal;konzole;server;",
+          "StartupWMClass": "C3Term"
+        }
+      }
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libsecret-1-0"
+      ]
+    },
+    "npmRebuild": true
+  }
+}

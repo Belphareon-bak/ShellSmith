@@ -1,0 +1,25 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=C3Term
+GenericName=SSH a SFTP terminál
+GenericName[en]=SSH and SFTP terminal
+Comment=Terminál s adresářovým stromem, taby a přenosem souborů přes SFTP
+Comment[en]=Terminal with directory tree, tabs and SFTP file transfers
+Exec=@EXEC@ %u
+Icon=c3term
+Terminal=false
+Categories=Network;RemoteAccess;TerminalEmulator;
+Keywords=ssh;sftp;terminal;konzole;server;mobaxterm;putty;
+StartupNotify=true
+StartupWMClass=C3Term
+MimeType=x-scheme-handler/ssh;
+Actions=NewLocal;NewSession;
+
+[Desktop Action NewLocal]
+Name=Nový lokální terminál
+Exec=@EXEC@ --new-local
+
+[Desktop Action NewSession]
+Name=Správce relací
+Exec=@EXEC@ --sessions

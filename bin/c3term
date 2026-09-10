@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Spouštěč C3Termu. Funguje i přes symlink v ~/.local/bin.
+set -euo pipefail
+
+APP_DIR="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+ELECTRON="$APP_DIR/node_modules/electron/dist/electron"
+
+if [ ! -x "$ELECTRON" ]; then
+  echo "C3Term: chybí závislosti. Spusťte v $APP_DIR příkaz: npm install" >&2
+  exit 1
+fi
+if [ ! -f "$APP_DIR/src/renderer/dist/bundle.js" ]; then
+  echo "C3Term: chybí sestavené rozhraní. Spusťte v $APP_DIR příkaz: npm run build:renderer" >&2
+  exit 1
+fi
+
+# Rodičovský proces (např. terminál uvnitř VS Code) může mít nastavené
+# ELECTRON_RUN_AS_NODE – to by Electron spustilo jen jako Node bez okna.
+exec env -u ELECTRON_RUN_AS_NODE -u ELECTRON_NO_ATTACH_CONSOLE \
+  "$ELECTRON" "$APP_DIR" "$@"

@@ -1,7 +1,7 @@
 {
-  "name": "c3term",
-  "productName": "C3Term",
-  "version": "1.0.0",
+  "name": "shellsmith",
+  "productName": "ShellSmith",
+  "version": "1.1.0",
   "description": "Profesionální SSH/SFTP terminál s adresářovým stromem, taby a multi-session správou",
   "main": "src/main/main.js",
   "author": "Belphareon",
@@ -32,8 +32,8 @@
     "esbuild": "^0.24.0"
   },
   "build": {
-    "appId": "cz.belphareon.c3term",
-    "productName": "C3Term",
+    "appId": "cz.belphareon.shellsmith",
+    "productName": "ShellSmith",
     "copyright": "© 2026 Belphareon",
     "directories": {
       "output": "release",
@@ -59,10 +59,10 @@
       "description": "Terminálový klient s adresářovým stromem, taby, rozdělenými panely a přenosem souborů přes SFTP.",
       "desktop": {
         "entry": {
-          "Name": "C3Term",
+          "Name": "ShellSmith",
           "GenericName": "SSH a SFTP terminál",
           "Keywords": "ssh;sftp;terminal;konzole;server;",
-          "StartupWMClass": "C3Term"
+          "StartupWMClass": "ShellSmith"
         }
       }
     },

@@ -69,12 +69,12 @@ export class SessionManagerPanel {
   }
 
   async load() {
-    this.items = await window.c3.saved.list();
+    this.items = await window.smith.saved.list();
     this.render();
   }
 
   async persist() {
-    await window.c3.saved.replace(this.items);
+    await window.smith.saved.replace(this.items);
     this.render();
   }
 
@@ -203,14 +203,14 @@ export class SessionManagerPanel {
     });
     if (!ok) return;
     this.items = this.items.filter((i) => i.id !== it.id);
-    await window.c3.secret.remove(`${it.id}:password`).catch(() => {});
-    await window.c3.secret.remove(`${it.id}:passphrase`).catch(() => {});
+    await window.smith.secret.remove(`${it.id}:password`).catch(() => {});
+    await window.smith.secret.remove(`${it.id}:passphrase`).catch(() => {});
     await this.persist();
   }
 
   async forgetSecrets(it) {
-    await window.c3.secret.remove(`${it.id}:password`).catch(() => {});
-    await window.c3.secret.remove(`${it.id}:passphrase`).catch(() => {});
+    await window.smith.secret.remove(`${it.id}:password`).catch(() => {});
+    await window.smith.secret.remove(`${it.id}:passphrase`).catch(() => {});
     toast('Uložené přihlašovací údaje smazány', { type: 'ok' });
   }
 
@@ -251,7 +251,7 @@ export class SessionManagerPanel {
     const browseKey = el('button', {
       class: 'btn btn-slim', text: 'Procházet…',
       onClick: async () => {
-        const p = await window.c3.dialog.openFiles({ title: 'Vyberte privátní klíč', properties: ['openFile', 'showHiddenFiles'] });
+        const p = await window.smith.dialog.openFiles({ title: 'Vyberte privátní klíč', properties: ['openFile', 'showHiddenFiles'] });
         if (p.length) f.keyPath.value = p[0];
       }
     });
@@ -335,7 +335,7 @@ export class SessionManagerPanel {
     }
 
     if (f.authType.value === 'password' && f.password.value && f.savePassword.checked) {
-      const stored = await window.c3.secret.set(`${next.id}:password`, f.password.value);
+      const stored = await window.smith.secret.set(`${next.id}:password`, f.password.value);
       if (!stored) toast('Klíčenka není dostupná, heslo se neuložilo – budete dotázáni při připojení', { type: 'error' });
     }
 

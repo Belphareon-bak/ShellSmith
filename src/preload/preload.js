@@ -19,7 +19,7 @@ function on(channel, fn) {
   };
 }
 
-contextBridge.exposeInMainWorld('c3', {
+contextBridge.exposeInMainWorld('smith', {
   /** Skutečná cesta souboru přetaženého ze systému (Electron 32+). */
   pathForFile: (file) => { try { return webUtils.getPathForFile(file); } catch (_) { return null; } },
   settings: {

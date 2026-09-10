@@ -70,7 +70,15 @@ export class Tab {
     pane.onFocus = () => { this.activePane = pane; this.manager.app.onPaneFocus(pane); };
   }
 
+  /** Najde uzel rozvržení, ve kterém sedí daný panel. */
+  findLeaf(pane, node = this.layout) {
+    if (!node) return null;
+    if (node.type === 'leaf') return node.pane === pane ? node : null;
+    return this.findLeaf(pane, node.a) || this.findLeaf(pane, node.b);
+  }
+
   panes(node = this.layout, out = []) {
+    if (!node) return out;
     if (node.type === 'leaf') out.push(node.pane);
     else { this.panes(node.a, out); this.panes(node.b, out); }
     return out;
@@ -107,7 +115,12 @@ export class Tab {
   render() {
     this.content.innerHTML = '';
     this.content.append(this.renderNode(this.layout));
-    for (const p of this.panes()) p.scheduleFit();
+    const panes = this.panes();
+    const split = panes.length > 1;
+    for (const p of panes) {
+      p.setSplitMode(split);
+      p.scheduleFit();
+    }
   }
 
   renderNode(node) {
@@ -192,13 +205,16 @@ export class Tab {
       { label: 'Duplikovat relaci', icon: 'copy', action: () => this.manager.app.duplicateTab(this) },
       { label: 'Znovu připojit', icon: 'refresh', disabled: !p, action: () => p && p.reconnect() },
       { separator: true },
-      { label: 'Rozdělit vodorovně', icon: 'splitH', action: () => this.manager.app.splitActive('h') },
-      { label: 'Rozdělit svisle', icon: 'splitV', action: () => this.manager.app.splitActive('v') },
+      { label: 'Rozdělit vodorovně…', icon: 'splitH', action: () => this.manager.app.splitActive('h') },
+      { label: 'Rozdělit svisle…', icon: 'splitV', action: () => this.manager.app.splitActive('v') },
+      this.panes().length > 1
+        ? { label: 'Zavřít aktivní panel', icon: 'close', accel: 'Ctrl+Shift+W', action: () => p && this.manager.app.closePane(p) }
+        : null,
       { separator: true },
       { label: 'Zavřít ostatní', action: () => this.manager.closeOthers(this) },
       { label: 'Zavřít vpravo', action: () => this.manager.closeToRight(this) },
-      { label: 'Zavřít tab', icon: 'close', danger: true, action: () => this.manager.closeTab(this) }
-    ]);
+      { label: 'Zavřít tab', icon: 'close', accel: 'Ctrl+Shift+Q', danger: true, action: () => this.manager.closeTab(this) }
+    ].filter(Boolean));
   }
 
   async dispose() {
@@ -309,4 +325,7 @@ export class TabManager {
   }
 
   allPanes() { return this.tabs.flatMap((t) => t.panes()); }
+
+  /** Ke kterému tabu panel patří. */
+  tabOf(pane) { return this.tabs.find((t) => t.panes().includes(pane)) || null; }
 }

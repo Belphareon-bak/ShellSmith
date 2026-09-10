@@ -109,7 +109,7 @@ class LocalSession extends BaseSession {
     const env = Object.assign({}, process.env, {
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
-      TERM_PROGRAM: 'C3Term'
+      TERM_PROGRAM: 'ShellSmith'
     });
     delete env.ELECTRON_RUN_AS_NODE;
 
@@ -178,7 +178,7 @@ class LocalSession extends BaseSession {
 /* ------------------------------------------------------------------ */
 
 /** Značka, kterou vzdálená strana potvrdí nastavení hooku. */
-const HOOK_MARKER = '\u001b]777;c3\u0007';
+const HOOK_MARKER = '\u001b]777;ss\u0007';
 
 const KNOWN_HOSTS = 'known_hosts.json';
 function knownHostsRead() {
@@ -273,8 +273,8 @@ class SshSession extends BaseSession {
       tryKeyboard: true,
       sock: sock || undefined,
       hostVerifier: undefined,
-      // C3TERM_DEBUG=1 vypíše celý průběh SSH spojení – k diagnostice připojení.
-      debug: process.env.C3TERM_DEBUG ? (m) => console.error('[ssh2]', m) : undefined
+      // SHELLSMITH_DEBUG=1 vypíše celý průběh SSH spojení – k diagnostice připojení.
+      debug: process.env.SHELLSMITH_DEBUG ? (m) => console.error('[ssh2]', m) : undefined
     };
 
     // --- ověření klíče serveru -------------------------------------
@@ -417,11 +417,11 @@ class SshSession extends BaseSession {
    */
   injectCwdHook() {
     const fmtCwd = '\\033]7;file://%s%s\\033\\\\';
-    const fmtMark = '\\033]777;c3\\007';
+    const fmtMark = '\\033]777;ss\\007';
     const hook =
-      '__c3term_hook() { printf \'' + fmtCwd + '\' "${HOSTNAME:-}" "$PWD"; }; ' +
-      'if [ -n "$ZSH_VERSION" ]; then precmd_functions+=(__c3term_hook); ' +
-      'else PROMPT_COMMAND="__c3term_hook${PROMPT_COMMAND:+; $PROMPT_COMMAND}"; fi; ' +
+      '__shellsmith_hook() { printf \'' + fmtCwd + '\' "${HOSTNAME:-}" "$PWD"; }; ' +
+      'if [ -n "$ZSH_VERSION" ]; then precmd_functions+=(__shellsmith_hook); ' +
+      'else PROMPT_COMMAND="__shellsmith_hook${PROMPT_COMMAND:+; $PROMPT_COMMAND}"; fi; ' +
       'printf \'' + fmtMark + '\'';
 
     this.hookCmd = hook;
@@ -448,7 +448,7 @@ class SshSession extends BaseSession {
         // zalomení překresluje. Řídíme se proto názvem funkce a ořízneme
         // vše od začátku toho řádku až za značku.
         let from = text.indexOf(this.hookCmd);
-        if (from < 0 || from > mi) from = text.indexOf('__c3term_hook');
+        if (from < 0 || from > mi) from = text.indexOf('__shellsmith_hook');
         if (from >= 0 && from < mi) {
           const lineStart = text.lastIndexOf('\n', from) + 1;
           text = text.slice(0, lineStart) + text.slice(mi + HOOK_MARKER.length);

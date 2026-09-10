@@ -115,7 +115,7 @@ export class FileTree {
   /* ---------------- navigace ---------------- */
 
   async goHome() {
-    try { await this.navigate(await window.c3.files.home(this.target)); }
+    try { await this.navigate(await window.smith.files.home(this.target)); }
     catch (e) { this.setStatus(`Nelze zjistit domovský adresář: ${e.message}`, true); }
   }
 
@@ -164,7 +164,7 @@ export class FileTree {
     if (isRoot) this.setStatus('Načítám…');
     this.render();
     try {
-      const res = await window.c3.files.list(this.target, path);
+      const res = await window.smith.files.list(this.target, path);
       n.children = sortEntries(res.entries);
       if (isRoot) this.setStatus(this.summary(n.children));
     } catch (e) {
@@ -385,7 +385,7 @@ export class FileTree {
       const files = items.filter((i) => (i.realType || i.type) !== 'dir');
       if (files.length) {
         try {
-          const urls = await window.c3.files.dragUrls(this.target, files.map((f) => ({
+          const urls = await window.smith.files.dragUrls(this.target, files.map((f) => ({
             path: f.path, name: f.name, size: f.size, type: f.realType || f.type
           })));
           if (urls && urls.length) e.dataTransfer.setData('DownloadURL', urls[0]);
@@ -461,7 +461,7 @@ export class FileTree {
     // Soubory přetažené ze systému (Dolphin, plocha…).
     const paths = [];
     for (const f of e.dataTransfer.files) {
-      const p = window.c3.pathForFile(f);
+      const p = window.smith.pathForFile(f);
       if (p) paths.push(p);
     }
     if (!paths.length) {
@@ -478,7 +478,7 @@ export class FileTree {
 
   async openEntry(entry) {
     try {
-      const res = await window.c3.files.openExternal(this.target, entry.path);
+      const res = await window.smith.files.openExternal(this.target, entry.path);
       if (!res.local) toast(`Otevřeno v editoru, změny se uloží zpět na server`, { type: 'ok' });
     } catch (e) {
       toast(`Nelze otevřít: ${e.message}`, { type: 'error' });
@@ -489,7 +489,7 @@ export class FileTree {
     const name = await promptDialog({ title: 'Nový adresář', label: 'Název', value: 'nový adresář', okLabel: 'Vytvořit' });
     if (!name) return;
     try {
-      await window.c3.files.mkdir(this.target, `${this.root.replace(/\/$/, '')}/${name}`);
+      await window.smith.files.mkdir(this.target, `${this.root.replace(/\/$/, '')}/${name}`);
       await this.refresh();
     } catch (e) { toast(`Nelze vytvořit adresář: ${e.message}`, { type: 'error' }); }
   }
@@ -500,7 +500,7 @@ export class FileTree {
     const name = await promptDialog({ title: 'Přejmenovat', label: 'Nový název', value: sel[0].name, okLabel: 'Přejmenovat' });
     if (!name || name === sel[0].name) return;
     try {
-      await window.c3.files.rename(this.target, sel[0].path, `${parentOf(sel[0].path)}/${name}`.replace('//', '/'));
+      await window.smith.files.rename(this.target, sel[0].path, `${parentOf(sel[0].path)}/${name}`.replace('//', '/'));
       await this.refresh();
     } catch (e) { toast(`Přejmenování selhalo: ${e.message}`, { type: 'error' }); }
   }
@@ -517,7 +517,7 @@ export class FileTree {
       if (!ok) return;
     }
     try {
-      await window.c3.files.remove(this.target, sel.map((s) => s.path));
+      await window.smith.files.remove(this.target, sel.map((s) => s.path));
       this.selection.clear();
       await this.refresh();
     } catch (e) { toast(`Mazání selhalo: ${e.message}`, { type: 'error' }); }
@@ -532,13 +532,13 @@ export class FileTree {
     const mode = parseInt(val, 8);
     if (Number.isNaN(mode)) return toast('Neplatná hodnota', { type: 'error' });
     try {
-      await window.c3.files.chmod(this.target, sel[0].path, mode);
+      await window.smith.files.chmod(this.target, sel[0].path, mode);
       await this.refresh();
     } catch (e) { toast(`Nelze změnit práva: ${e.message}`, { type: 'error' }); }
   }
 
   async uploadDialog() {
-    const paths = await window.c3.dialog.openFiles({ title: `Nahrát do ${this.root}` });
+    const paths = await window.smith.dialog.openFiles({ title: `Nahrát do ${this.root}` });
     if (!paths.length) return;
     await this.app.startTransfer({ srcTarget: 'local', srcPaths: paths, dstTarget: this.target, dstDir: this.root, move: false });
     this.refresh();
@@ -547,7 +547,7 @@ export class FileTree {
   async downloadDialog() {
     const sel = this.selectedEntries();
     if (!sel.length) return toast('Nejdřív vyberte, co se má stáhnout');
-    const dir = await window.c3.dialog.openDir({ title: 'Stáhnout do…' });
+    const dir = await window.smith.dialog.openDir({ title: 'Stáhnout do…' });
     if (!dir) return;
     await this.app.startTransfer({ srcTarget: this.target, srcPaths: sel.map((s) => s.path), dstTarget: 'local', dstDir: dir, move: false });
   }
@@ -560,7 +560,7 @@ export class FileTree {
       { label: isDir ? 'Otevřít' : 'Otevřít v editoru', icon: isDir ? 'folderOpen' : 'externalLink', disabled: !one, action: () => this.onRowActivate(entry) },
       { label: 'Stáhnout do…', icon: 'download', action: () => this.downloadDialog() },
       { label: 'Nahrát sem…', icon: 'upload', disabled: !isDir, action: async () => {
-          const paths = await window.c3.dialog.openFiles({ title: `Nahrát do ${entry.path}` });
+          const paths = await window.smith.dialog.openFiles({ title: `Nahrát do ${entry.path}` });
           if (paths.length) { await this.app.startTransfer({ srcTarget: 'local', srcPaths: paths, dstTarget: this.target, dstDir: entry.path, move: false }); this.refresh(); }
         } },
       { separator: true },
@@ -568,7 +568,7 @@ export class FileTree {
       { label: 'Změnit práva…', icon: 'lock', disabled: !one, action: () => this.chmodSelected() },
       { label: 'Nový adresář…', icon: 'folderPlus', action: () => this.createFolder() },
       { separator: true },
-      { label: 'Kopírovat cestu', icon: 'copy', action: () => window.c3.clipboard.write(sel.map((s) => s.path).join('\n')) },
+      { label: 'Kopírovat cestu', icon: 'copy', action: () => window.smith.clipboard.write(sel.map((s) => s.path).join('\n')) },
       { label: 'Vložit cestu do terminálu', icon: 'terminal', action: () => this.app.typeInTerminal(sel.map((s) => `'${s.path}'`).join(' ')) },
       isDir ? { label: 'Přejít v terminálu (cd)', icon: 'play', action: () => this.app.typeInTerminal(`cd '${entry.path}'\n`) } : null,
       { separator: true },
@@ -583,7 +583,7 @@ export class FileTree {
       { label: 'Nahrát soubory…', icon: 'upload', action: () => this.uploadDialog() },
       { separator: true },
       { label: this.app.settings.files.showHidden ? 'Skrýt skryté soubory' : 'Zobrazit skryté soubory', icon: 'eye', action: () => this.toggleHidden() },
-      { label: 'Kopírovat cestu adresáře', icon: 'copy', action: () => window.c3.clipboard.write(this.root) },
+      { label: 'Kopírovat cestu adresáře', icon: 'copy', action: () => window.smith.clipboard.write(this.root) },
       { label: 'Obnovit', icon: 'refresh', accel: 'F5', action: () => this.refresh() }
     ]);
   }

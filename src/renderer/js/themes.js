@@ -95,8 +95,8 @@ export const THEMES = {
   },
 
   /* ---------------------------------------------------------------- */
-  'c3-nocturne': {
-    name: 'C3 Nocturne',
+  'ss-nocturne': {
+    name: 'ShellSmith Nocturne',
     dark: true,
     description: 'Vlastní návrh: chladná modrošedá plocha, tyrkysový akcent a terminál laděný na dlouhé čtení.',
     ui: {
@@ -140,8 +140,8 @@ export const THEMES = {
   },
 
   /* ---------------------------------------------------------------- */
-  'c3-daylight': {
-    name: 'C3 Daylight',
+  'ss-daylight': {
+    name: 'ShellSmith Daylight',
     dark: false,
     description: 'Vlastní světlý návrh pro práci za dne – teplý papírový podklad, tmavý text, stejný akcent.',
     ui: {
@@ -189,7 +189,12 @@ export function themeList() {
   return Object.entries(THEMES).map(([id, t]) => ({ id, name: t.name, dark: t.dark, description: t.description }));
 }
 
-export function applyTheme(id) {
+/** Motivy se kdysi jmenovaly jinak; uložené nastavení tím nemá trpět. */
+const LEGACY_THEMES = { 'c3-nocturne': 'ss-nocturne', 'c3-daylight': 'ss-daylight' };
+export const resolveTheme = (id) => LEGACY_THEMES[id] || id;
+
+export function applyTheme(rawId) {
+  const id = resolveTheme(rawId);
   const theme = THEMES[id] || THEMES['moba-dark'];
   const root = document.documentElement;
   for (const [k, v] of Object.entries(theme.ui)) root.style.setProperty(k, v);
@@ -198,6 +203,6 @@ export function applyTheme(id) {
   return theme;
 }
 
-export function termTheme(id) {
-  return (THEMES[id] || THEMES['moba-dark']).term;
+export function termTheme(rawId) {
+  return (THEMES[resolveTheme(rawId)] || THEMES['moba-dark']).term;
 }

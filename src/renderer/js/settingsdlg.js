@@ -109,9 +109,9 @@ export async function openSettings(app, focusSection = null) {
       el('span', { text: section.title })));
   }
 
-  const info = await window.c3.app.info();
+  const info = await window.smith.app.info();
   const about = el('div', { class: 'settings-about' },
-    el('div', { text: `C3Term ${info.version} · Electron ${info.electron} · Chromium ${info.chrome}` }),
+    el('div', { text: `ShellSmith ${info.version} · Electron ${info.electron} · Chromium ${info.chrome}` }),
     el('div', { class: 'muted', text: `Nastavení: ${info.configDir}` }),
     el('div', { class: 'muted', text: `SSH agent: ${info.hasAgent ? 'dostupný' : 'není'} · klíčenka: ${info.secretsAvailable ? 'dostupná' : 'nedostupná'}` })
   );

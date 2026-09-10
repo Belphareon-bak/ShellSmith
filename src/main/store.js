@@ -7,10 +7,26 @@ const { DEFAULTS, deepMerge } = require('../shared/defaults');
 let dir = null;
 function configDir() {
   if (!dir) {
-    dir = path.join(app.getPath('appData'), 'c3term');
+    dir = path.join(app.getPath('appData'), 'shellsmith');
+    if (!fs.existsSync(dir)) migrateLegacyConfig(dir);
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
   return dir;
+}
+
+/** Aplikace se dřív jmenovala jinak – nastavení a relace si vezmeme s sebou. */
+function migrateLegacyConfig(target) {
+  for (const legacy of ['c3term']) {
+    const from = path.join(app.getPath('appData'), legacy);
+    if (!fs.existsSync(from)) continue;
+    try {
+      fs.renameSync(from, target);
+      console.log(`[store] převzata konfigurace z ~/.config/${legacy}`);
+      return;
+    } catch (e) {
+      console.error('[store] konfiguraci se nepodařilo převzít:', e.message);
+    }
+  }
 }
 const file = (name) => path.join(configDir(), name);
 

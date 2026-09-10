@@ -1,5 +1,26 @@
 # Změny
 
+## 1.1.0 — 2026-09-10
+
+### Přejmenování
+- Projekt se jmenuje **ShellSmith** (dříve C3Term). Přejmenován spouštěč,
+  položka v nabídce, ikony, balíček i adresář s nastavením; stará konfigurace
+  z `~/.config/c3term` se při prvním startu automaticky převezme.
+- Motivy `C3 Nocturne` / `C3 Daylight` se jmenují `ShellSmith Nocturne` /
+  `ShellSmith Daylight`; uložená volba starého motivu se namapuje na nový.
+
+### Rozdělené panely
+- **Oprava:** rozdělení nešlo vzít zpět jinak než ukončením shellu. Panely
+  v rozděleném tabu teď mají hlavičku s křížkem a `Ctrl+Shift+W` zavírá panel
+  (poslední panel zavře tab). Celý tab zavře `Ctrl+Shift+Q`.
+- **Nové:** při rozdělení se vybírá, co se v nové polovině zobrazí — nový
+  lokální terminál, zopakování relace, kterákoli uložená relace, nebo přesun
+  terminálu, který už běží v jiném tabu.
+- **Nové:** prohození dvou panelů (i napříč taby) a odpojení panelu do
+  vlastního tabu. Relace při přesunu běží dál, spojení se nepřerušuje.
+- Hlavička panelu ukazuje název relace a její stav, takže je v rozděleném
+  zobrazení poznat, co kde běží.
+
 ## 1.0.0 — 2026-09-10
 
 První vydání.
@@ -33,7 +54,7 @@ První vydání.
 - Renderer v sandboxu s izolací kontextu, bez integrace Node
 
 ### Vzhled a nastavení
-- Čtyři motivy (MobaXterm Dark/Classic, C3 Nocturne, C3 Daylight), přepínání za běhu
+- Čtyři motivy (MobaXterm Dark/Classic, ShellSmith Nocturne, ShellSmith Daylight), přepínání za běhu
 - Nastavení generované ze schématu, ukládá se okamžitě
 - Vlastní titulková lišta s možností přepnout na systémový rámeček
 

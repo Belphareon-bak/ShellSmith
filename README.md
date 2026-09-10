@@ -1,20 +1,20 @@
-# C3Term
+# ShellSmith
 
-**Verze:** 1.0.0
+**Verze:** 1.1.0
 
 SSH a SFTP klient pro Linux v duchu MobaXtermu: vlevo adresářový strom s drag &
 drop, vpravo terminál s taby a rozdělenými panely, nahoře správce uložených
 relací. Postaveno na Electronu, xterm.js a ssh2 — bez X11 forwardingu a bez
 dalších závislostí.
 
-![C3Term v motivu MobaXterm Dark](docs/screenshots/moba-dark.png)
+![ShellSmith v motivu MobaXterm Dark](docs/screenshots/moba-dark.png)
 
 ---
 
 ## Instalace
 
 ```bash
-cd ~/Projects/c3term
+cd ~/Projects/shellsmith
 ./install.sh
 ```
 
@@ -23,15 +23,15 @@ přihlášeného uživatele:
 
 | Co | Kam |
 |---|---|
-| spouštěč | `~/.local/bin/c3term` |
-| položka v nabídce | `~/.local/share/applications/c3term.desktop` |
-| ikony | `~/.local/share/icons/hicolor/*/apps/c3term.png` |
+| spouštěč | `~/.local/bin/shellsmith` |
+| položka v nabídce | `~/.local/share/applications/shellsmith.desktop` |
+| ikony | `~/.local/share/icons/hicolor/*/apps/shellsmith.png` |
 
-**Připnutí na panel Kubuntu:** otevřete nabídku aplikací, najděte *C3Term*
+**Připnutí na panel Kubuntu:** otevřete nabídku aplikací, najděte *ShellSmith*
 (kategorie Internet / Síť), pravé tlačítko → *Přidat do panelu*. Aplikace hlásí
-`WM_CLASS = C3Term`, takže KDE spáruje běžící okno se spouštěčem správně.
+`WM_CLASS = ShellSmith`, takže KDE spáruje běžící okno se spouštěčem správně.
 
-Odinstalace: `./uninstall.sh` (nastavení v `~/.config/c3term` zůstává).
+Odinstalace: `./uninstall.sh` (nastavení v `~/.config/shellsmith` zůstává).
 
 ### Distribuční balíčky
 
@@ -90,9 +90,28 @@ Tab lze přejmenovat (dvojklik), přetáhnout na jiné místo, duplikovat nebo z
 připojit. Každý tab se dá rozdělit vodorovně i svisle, a to opakovaně — vzniká
 strom panelů s posuvnými předěly. Barevná tečka u názvu ukazuje stav relace.
 
-Když relace spadne, panel nabídne **Znovu připojit** místo toho, aby zmizel.
+Jakmile je tab rozdělený, dostane každý panel vlastní hlavičku: název relace,
+její stav, přepínač obsahu a **křížek pro zavření**. Rozdělení tak jde kdykoli
+vzít zpět jedním kliknutím — nemusíte ukončovat shell.
 
-![Rozdělené panely](docs/screenshots/split.png)
+![Rozdělené panely s hlavičkami](docs/screenshots/split.png)
+
+**Co se v panelu zobrazí, si vybíráte.** Rozdělení přes nástrojovou lištu,
+kontextové menu nebo přepínač v hlavičce otevře nabídku:
+
+- **Nový lokální terminál**
+- **Zopakovat** — další připojení téže relace
+- **kterákoli uložená relace** — připojí se rovnou do nové poloviny
+- **Přesunout sem** — vezme terminál, který už běží v jiném tabu, i s jeho
+  historií a spojením, a přesune ho do splitu; opuštěný tab se sám zavře
+
+![Nabídka výběru obsahu panelu](docs/screenshots/split-picker.png)
+
+Přepínač v hlavičce panelu navíc umí **prohodit dva panely** (i napříč taby)
+a **odpojit panel zpět do vlastního tabu**. Relace přitom běží dál — přesouvá
+se jen její místo na obrazovce.
+
+Když relace spadne, panel nabídne **Znovu připojit** místo toho, aby zmizel.
 
 ### Uložené relace
 
@@ -126,14 +145,14 @@ Vypnout lze v *Nastavení → SSH → Sledovat pracovní adresář*.
 
 | | |
 |---|---|
-| ![MobaXterm Dark](docs/screenshots/moba-dark.png) **MobaXterm Dark** — tmavé rozhraní, černý terminál | ![C3 Nocturne](docs/screenshots/c3-nocturne.png) **C3 Nocturne** — vlastní návrh, tyrkysový akcent |
-| ![MobaXterm Classic](docs/screenshots/moba-classic.png) **MobaXterm Classic** — světlé rozhraní, černý terminál | ![C3 Daylight](docs/screenshots/c3-daylight.png) **C3 Daylight** — vlastní světlý návrh |
+| ![MobaXterm Dark](docs/screenshots/moba-dark.png) **MobaXterm Dark** — tmavé rozhraní, černý terminál | ![ShellSmith Nocturne](docs/screenshots/ss-nocturne.png) **ShellSmith Nocturne** — vlastní návrh, tyrkysový akcent |
+| ![MobaXterm Classic](docs/screenshots/moba-classic.png) **MobaXterm Classic** — světlé rozhraní, černý terminál | ![ShellSmith Daylight](docs/screenshots/ss-daylight.png) **ShellSmith Daylight** — vlastní světlý návrh |
 
 ### Nastavení
 
 ![Nastavení](docs/screenshots/settings.png)
 
-Vše se ukládá okamžitě do `~/.config/c3term/settings.json`. Nastavit lze font a
+Vše se ukládá okamžitě do `~/.config/shellsmith/settings.json`. Nastavit lze font a
 jeho velikost, výšku řádku, tvar a blikání kurzoru, délku historie, chování myši
 a schránky, SSH keepalive a timeouty, zobrazení skrytých souborů, externí editor
 a další. Tlačítko *Obnovit výchozí* vrátí nastavení, uložené relace nechá být.
@@ -146,10 +165,11 @@ a další. Tlačítko *Obnovit výchozí* vrátí nastavení, uložené relace n
 |---|---|
 | `Ctrl+Shift+T` | nový lokální terminál |
 | `Ctrl+Shift+N` | nová uložená relace |
-| `Ctrl+Shift+W` | zavřít tab |
+| `Ctrl+Shift+W` | zavřít panel (poslední panel zavře tab) |
+| `Ctrl+Shift+Q` | zavřít celý tab |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | další / předchozí tab |
 | `Alt+1` … `Alt+9` | přepnout na tab podle čísla |
-| `Ctrl+Shift+E` / `Ctrl+Shift+O` | rozdělit svisle / vodorovně |
+| `Ctrl+Shift+E` / `Ctrl+Shift+O` | rozdělit svisle / vodorovně (zopakuje aktuální relaci) |
 | `Ctrl+Shift+C` / `Ctrl+Shift+V` | kopírovat / vložit |
 | `Ctrl+Shift+F` | hledat v terminálu |
 | `Ctrl` + `+` / `-` / `0` | velikost písma |
@@ -162,7 +182,7 @@ a další. Tlačítko *Obnovit výchozí* vrátí nastavení, uložené relace n
 
 ## Bezpečnost
 
-**Otisky klíčů serverů.** C3Term si vede vlastní `known_hosts.json`. Při prvním
+**Otisky klíčů serverů.** ShellSmith si vede vlastní `known_hosts.json`. Při prvním
 připojení ukáže otisk k potvrzení; když se otisk později změní, spojení zastaví
 a upozorní.
 
@@ -184,7 +204,7 @@ Soubory s nastavením mají práva `600`, adresář `700`.
 ## Kde co je
 
 ```
-~/.config/c3term/
+~/.config/shellsmith/
 ├── settings.json      nastavení
 ├── sessions.json      uložené relace
 ├── secrets.json       zašifrovaná hesla (jen se souhlasem)
@@ -204,8 +224,8 @@ npm run watch:renderer # průběžné sestavování rozhraní
 npm run dist           # .deb + AppImage
 ```
 
-`C3TERM_DEBUG=1` vypíše celý průběh SSH spojení — užitečné při řešení potíží
-s přihlášením. `C3TERM_DEVTOOLS=1` otevře vývojářské nástroje.
+`SHELLSMITH_DEBUG=1` vypíše celý průběh SSH spojení — užitečné při řešení potíží
+s přihlášením. `SHELLSMITH_DEVTOOLS=1` otevře vývojářské nástroje.
 
 Popis vnitřního uspořádání je v [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -215,7 +235,7 @@ Popis vnitřního uspořádání je v [docs/ARCHITECTURE.md](docs/ARCHITECTURE.m
 
 **Okno se neotevře a v konzoli je `Cannot read properties of undefined`** —
 prostředí má nastavenou proměnnou `ELECTRON_RUN_AS_NODE` (dědí se například
-z terminálu uvnitř VS Code). Spouštěč `bin/c3term` ji odstraňuje sám; pokud
+z terminálu uvnitř VS Code). Spouštěč `bin/shellsmith` ji odstraňuje sám; pokud
 spouštíte Electron ručně, použijte `env -u ELECTRON_RUN_AS_NODE`.
 
 **Strom nenásleduje `cd` na serveru** — hook se instaluje jen pro shelly
@@ -227,7 +247,7 @@ soubory do něj, nebo použít *Stáhnout do…* z kontextového menu.
 
 **Připojení končí hláškou o uzavření před přihlášením** — server odmítl spojení
 ještě před ověřením; typicky jde o limit souběžných přihlášení. Zkuste to znovu,
-případně spusťte s `C3TERM_DEBUG=1` a podívejte se na průběh.
+případně spusťte s `SHELLSMITH_DEBUG=1` a podívejte se na průběh.
 
 ---
 

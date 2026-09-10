@@ -14,8 +14,8 @@ const { LocalAdapter, SftpAdapter } = require('./fsadapters');
 const { TransferJob, TransferQueue, removeRecursive } = require('./transfer');
 const { DragServer } = require('./dragserver');
 
-app.setName('C3Term');
-app.setAppUserModelId('cz.belphareon.c3term');
+app.setName('ShellSmith');
+app.setAppUserModelId('cz.belphareon.shellsmith');
 
 const manager = new SessionManager();
 const transfers = new TransferQueue();
@@ -63,7 +63,7 @@ function createWindow() {
     frame: native,
     backgroundColor: '#12161c',
     icon: path.join(__dirname, '..', '..', 'build', 'icon.png'),
-    title: 'C3Term',
+    title: 'ShellSmith',
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'preload.js'),
       contextIsolation: true,
@@ -80,7 +80,7 @@ function createWindow() {
   win.once('ready-to-show', () => {
     if (bounds.maximized) win.maximize();
     win.show();
-    if (process.env.C3TERM_DEVTOOLS === '1') win.webContents.openDevTools({ mode: 'detach' });
+    if (process.env.SHELLSMITH_DEVTOOLS === '1') win.webContents.openDevTools({ mode: 'detach' });
   });
 
   const saveBounds = () => {
@@ -104,7 +104,7 @@ function createWindow() {
       type: 'question',
       buttons: ['Ukončit', 'Zpět'],
       defaultId: 1, cancelId: 1,
-      title: 'Ukončit C3Term',
+      title: 'Ukončit ShellSmith',
       message: `Běží ${active} ${active === 1 ? 'aktivní relace' : active < 5 ? 'aktivní relace' : 'aktivních relací'}.`,
       detail: 'Opravdu chcete aplikaci ukončit?'
     }).then((r) => {
@@ -319,7 +319,7 @@ handle('files:openExternal', async (target, remotePath) => {
     await shell.openPath(remotePath);
     return { local: true };
   }
-  const dir = path.join(os.tmpdir(), 'c3term-edit', Date.now().toString(36));
+  const dir = path.join(os.tmpdir(), 'shellsmith-edit', Date.now().toString(36));
   await fsp.mkdir(dir, { recursive: true });
   const localPath = path.join(dir, a.basename(remotePath));
   await fsp.writeFile(localPath, await a.readFile(remotePath));

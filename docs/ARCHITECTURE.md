@@ -1,6 +1,6 @@
-# Architektura C3Termu
+# Architektura ShellSmithu
 
-**Verze:** 1.0.0
+**Verze:** 1.1.0
 
 Aplikace stojí na Electronu a drží se klasického rozdělení: **main proces** má
 přístup k systému (procesy, sokety, disk), **renderer** kreslí rozhraní a nemá
@@ -82,6 +82,11 @@ aby se data zbytečně nepřenášela.
 v tabu víc — `Tab` drží binární strom `{ leaf | split }` a překresluje ho do
 vnořených flexboxů s táhly.
 
+Panely nejsou svázané s tabem natrvalo: `movePaneIntoSplit`, `swapPanes`
+a `detachPane` přepisují jen odkazy v uzlech rozvržení a panel se přenese do
+DOM cíle. Relace ani xterm se přitom nevytvářejí znovu, takže přesun mezi taby
+nepřeruší spojení ani nezahodí historii.
+
 `FileTree` si drží mapu `cesta → { children, expanded }` a z ní počítá seznam
 viditelných řádků. Řádky adresářů jsou zároveň cíle pro puštění, takže lze
 pustit soubor přímo „do složky" bez toho, aby se do ní muselo vstoupit.
@@ -99,7 +104,7 @@ Poškozený soubor se odloží stranou místo aby se ztratil. Tajemství jdou p�
 ## Testování
 
 Aplikace se dá řídit zvenčí přes CDP — po spuštění s
-`--remote-debugging-port=<port>` je v rendereru dostupné `window.__c3app`
+`--remote-debugging-port=<port>` je v rendereru dostupné `window.__shellsmith`
 a přes `Runtime.evaluate` lze volat cokoli z veřejného API (`connectSaved`,
 `startTransfer`, `remoteTree.navigate`, …) a kontrolovat výsledek. Tímto
 způsobem byl ověřen SSH handshake, dialogy, SFTP operace, přenosy včetně kolizí

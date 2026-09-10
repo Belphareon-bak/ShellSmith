@@ -1,5 +1,5 @@
 /* ==================================================================
-   C3Term – vzhled aplikace
+   ShellSmith – vzhled aplikace
    Barvy přicházejí z motivu jako CSS proměnné (viz js/themes.js).
    ================================================================== */
 
@@ -372,10 +372,29 @@ body.files-split #files-resize:hover { background: var(--accent); }
 .pane.focused::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
   box-shadow: inset 0 0 0 1px var(--accent); opacity: .35;
+  z-index: 1;
 }
 .split .pane.focused::after { opacity: .55; }
 .pane.bell { animation: bellflash .18s; }
 @keyframes bellflash { from { filter: invert(.12); } to { filter: none; } }
+
+/* Hlavička panelu – jen v rozděleném tabu, aby bylo vidět a ovladatelné,
+   co v kterém panelu běží. */
+.pane-head {
+  display: flex; align-items: center; gap: 5px;
+  height: 22px; flex: none; padding: 0 3px 0 7px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 11px; color: var(--text-dim);
+}
+.pane.focused .pane-head { background: var(--panel); color: var(--text); }
+.pane-head-ico { display: flex; flex: none; opacity: .8; }
+.pane-head-title {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pane-head .icon-btn { opacity: .55; }
+.pane-head:hover .icon-btn, .pane.focused .pane-head .icon-btn { opacity: 1; }
+.pane-head-close:hover { background: var(--danger) !important; color: #fff; }
 
 .term-host { flex: 1; min-height: 0; padding: 4px 2px 2px 6px; overflow: hidden; }
 .term-host .xterm { height: 100%; }

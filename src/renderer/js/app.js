@@ -30,8 +30,8 @@ class App {
   /* ================================================================ */
 
   async boot() {
-    this.settings = await window.c3.settings.get();
-    this.info = await window.c3.app.info();
+    this.settings = await window.smith.settings.get();
+    this.info = await window.smith.app.info();
     this.fontSize = this.settings.terminal.fontSize;
     applyTheme(this.settings.appearance.theme);
 
@@ -76,14 +76,14 @@ class App {
       menubar.append(btn);
     }
 
-    $('#win-min').addEventListener('click', () => window.c3.win.minimize());
-    $('#win-max').addEventListener('click', () => window.c3.win.toggleMaximize());
+    $('#win-min').addEventListener('click', () => window.smith.win.minimize());
+    $('#win-max').addEventListener('click', () => window.smith.win.toggleMaximize());
     $('#win-close').addEventListener('click', () => this.quit());
     $('#titlebar').addEventListener('dblclick', (e) => {
       if (e.target.closest('.no-drag')) return;
-      window.c3.win.toggleMaximize();
+      window.smith.win.toggleMaximize();
     });
-    window.c3.win.onState(({ maximized }) => {
+    window.smith.win.onState(({ maximized }) => {
       $('#win-max').innerHTML = icon(maximized ? 'restore' : 'maximize', 14);
     });
 
@@ -97,8 +97,14 @@ class App {
       tool('plus', 'Nová relace', 'Vytvořit uloženou relaci (Ctrl+Shift+N)', () => this.sessions.editSession(null)),
       tool('terminal', 'Lokální', 'Nový lokální terminál (Ctrl+Shift+T)', () => this.newLocalTab()),
       el('div', { class: 'tool-sep' }),
-      tool('splitV', 'Rozdělit', 'Rozdělit svisle (Ctrl+Shift+E)', () => this.splitActive('v')),
-      tool('splitH', '', 'Rozdělit vodorovně (Ctrl+Shift+O)', () => this.splitActive('h'), 'icon-only'),
+      tool('splitV', 'Rozdělit', 'Rozdělit svisle – s výběrem, co se v panelu zobrazí', (e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        this.showSplitPicker('v', r.left, r.bottom + 2);
+      }),
+      tool('splitH', '', 'Rozdělit vodorovně – s výběrem, co se v panelu zobrazí', (e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        this.showSplitPicker('h', r.left, r.bottom + 2);
+      }, 'icon-only'),
       el('div', { class: 'tool-sep' }),
       tool('search', '', 'Hledat v terminálu (Ctrl+Shift+F)', () => this.activePane && this.activePane.toggleSearch(true), 'icon-only'),
       tool('upload', '', 'Nahrát soubory na server', () => this.remoteTree.uploadDialog(), 'icon-only'),
@@ -247,13 +253,14 @@ class App {
   menuTerminal() {
     const p = this.activePane;
     return [
-      { label: 'Kopírovat', icon: 'copy', accel: 'Ctrl+Shift+C', disabled: !p || !p.hasSelection(), action: () => window.c3.clipboard.write(p.selection()) },
+      { label: 'Kopírovat', icon: 'copy', accel: 'Ctrl+Shift+C', disabled: !p || !p.hasSelection(), action: () => window.smith.clipboard.write(p.selection()) },
       { label: 'Vložit', icon: 'clipboard', accel: 'Ctrl+Shift+V', disabled: !p, action: () => p.pasteFromClipboard() },
       { label: 'Hledat…', icon: 'search', accel: 'Ctrl+Shift+F', disabled: !p, action: () => p.toggleSearch(true) },
       { separator: true },
-      { label: 'Rozdělit svisle', icon: 'splitV', accel: 'Ctrl+Shift+E', disabled: !p, action: () => this.splitActive('v') },
-      { label: 'Rozdělit vodorovně', icon: 'splitH', accel: 'Ctrl+Shift+O', disabled: !p, action: () => this.splitActive('h') },
-      { label: 'Zavřít panel', icon: 'close', disabled: !p, action: () => this.closePane(p) },
+      { label: 'Rozdělit svisle…', icon: 'splitV', accel: 'Ctrl+Shift+E', disabled: !p, action: () => this.showSplitPicker('v') },
+      { label: 'Rozdělit vodorovně…', icon: 'splitH', accel: 'Ctrl+Shift+O', disabled: !p, action: () => this.showSplitPicker('h') },
+      { label: 'Zvolit obsah panelu…', icon: 'layers', disabled: !p, action: () => this.showPaneChooser(p) },
+      { label: 'Zavřít panel', icon: 'close', accel: 'Ctrl+Shift+W', disabled: !p, action: () => this.closePane(p) },
       { separator: true },
       { label: 'Vymazat obrazovku', icon: 'refresh', disabled: !p, action: () => p.term.clear() },
       { label: 'Nastavení terminálu…', icon: 'settings', action: () => openSettings(this, 'terminal') }
@@ -264,8 +271,8 @@ class App {
     return [
       { label: 'Klávesové zkratky', icon: 'bolt', action: () => this.showShortcuts() },
       { label: 'Složka s nastavením', icon: 'folder', action: async () => {
-          const dir = await window.c3.settings.configDir();
-          window.c3.clipboard.write(dir);
+          const dir = await window.smith.settings.configDir();
+          window.smith.clipboard.write(dir);
           toast(`Cesta zkopírována: ${dir}`, { type: 'ok' });
         } },
       { separator: true },
@@ -277,10 +284,11 @@ class App {
     const rows = [
       ['Ctrl+Shift+T', 'Nový lokální terminál'],
       ['Ctrl+Shift+N', 'Nová uložená relace'],
-      ['Ctrl+Shift+W', 'Zavřít tab'],
+      ['Ctrl+Shift+W', 'Zavřít panel (poslední panel zavře tab)'],
+      ['Ctrl+Shift+Q', 'Zavřít celý tab'],
       ['Ctrl+Tab / Ctrl+Shift+Tab', 'Další / předchozí tab'],
       ['Alt+1 … Alt+9', 'Přepnout na tab podle čísla'],
-      ['Ctrl+Shift+E / Ctrl+Shift+O', 'Rozdělit svisle / vodorovně'],
+      ['Ctrl+Shift+E / Ctrl+Shift+O', 'Rozdělit svisle / vodorovně (s výběrem relace)'],
       ['Ctrl+Shift+C / Ctrl+Shift+V', 'Kopírovat / vložit'],
       ['Označení myší', 'Kopírovat do schránky'],
       ['Pravé tlačítko', 'Vložit ze schránky'],
@@ -299,10 +307,10 @@ class App {
   }
 
   async showAbout() {
-    const i = await window.c3.app.info();
+    const i = await window.smith.app.info();
     const body = el('div', { class: 'about' },
       el('div', { class: 'about-logo', html: icon('terminal', 40) }),
-      el('h2', { text: 'C3Term' }),
+      el('h2', { text: 'ShellSmith' }),
       el('p', { class: 'muted', text: `Verze ${i.version}` }),
       el('p', { text: 'SSH a SFTP klient s adresářovým stromem, taby a rozdělenými panely.' }),
       el('dl', { class: 'about-list' },
@@ -329,14 +337,19 @@ class App {
     return tab;
   }
 
-  async connectSaved(cfg, opts = {}) {
-    const paneOpts = cfg.kind === 'local'
+  /** Uložená relace → parametry pro nový panel. */
+  paneOptsFor(cfg) {
+    return cfg.kind === 'local'
       ? { kind: 'local', shell: cfg.shell, cwd: cfg.cwd, title: cfg.name, sessionRef: cfg.id, initialCommand: cfg.initialCommand }
       : {
           kind: 'ssh', host: cfg.host, port: cfg.port, username: cfg.username,
           authType: cfg.authType, keyPath: cfg.keyPath, proxyJump: cfg.proxyJump || null,
           title: cfg.name, sessionRef: cfg.id, initialCommand: cfg.initialCommand
         };
+  }
+
+  async connectSaved(cfg, opts = {}) {
+    const paneOpts = this.paneOptsFor(cfg);
 
     const pane = new TerminalPane(this, paneOpts);
     if (opts.split && this.tabs.active) {
@@ -362,14 +375,136 @@ class App {
     this.setActivePane(clone);
   }
 
+  /** Rychlé rozdělení: zopakuje relaci z aktivního panelu (klávesová zkratka). */
   async splitActive(dir) {
-    const tab = this.tabs.active;
-    if (!tab || !tab.activePane) return;
-    const src = tab.activePane;
-    const pane = new TerminalPane(this, Object.assign({}, src.opts, { cwd: src.cwd || src.opts.cwd }));
+    const src = this.activePane;
+    if (!src) return;
+    return this.splitWith(dir, Object.assign({}, src.opts, { cwd: src.cwd || src.opts.cwd }), src);
+  }
+
+  /** Rozdělí panel a do nové poloviny vloží relaci podle zadání. */
+  async splitWith(dir, opts, targetPane) {
+    const src = targetPane || this.activePane;
+    const tab = this.tabs.tabOf(src);
+    if (!tab) return;
+    const pane = new TerminalPane(this, opts);
     tab.splitPane(src, dir, pane);
     await pane.start();
     this.setActivePane(pane);
+    this.persistState();
+    return pane;
+  }
+
+  /**
+   * Nabídka „co dát do nové poloviny". Kromě nové relace umí i přesunout sem
+   * terminál, který už běží v jiném tabu – kvůli tomu tahle nabídka vznikla.
+   */
+  showSplitPicker(dir, x, y) {
+    const src = this.activePane;
+    if (!src) return;
+    const anchor = this.menuAnchor(x, y, src);
+    const others = this.tabs.allPanes().filter((p) => p !== src);
+
+    contextMenu(anchor.x, anchor.y, [
+      { label: 'Nový lokální terminál', icon: 'terminal', action: () => this.splitWith(dir, { kind: 'local' }, src) },
+      { label: `Zopakovat: ${src.title}`, icon: 'copy',
+        action: () => this.splitWith(dir, Object.assign({}, src.opts, { cwd: src.cwd || src.opts.cwd }), src) },
+      this.sessions.items.length ? { separator: true } : null,
+      ...this.sessions.items.slice(0, 12).map((cfg) => ({
+        label: cfg.name, icon: cfg.kind === 'local' ? 'terminal' : 'server',
+        action: () => this.splitWith(dir, this.paneOptsFor(cfg), src)
+      })),
+      others.length ? { separator: true } : null,
+      ...others.map((p) => ({
+        label: `Přesunout sem: ${this.paneLabel(p)}`, icon: 'layers',
+        action: () => this.movePaneIntoSplit(p, src, dir)
+      }))
+    ].filter(Boolean));
+  }
+
+  /** Nabídka na hlavičce panelu: prohodit, odpojit, znovu připojit, zavřít. */
+  showPaneChooser(pane, x, y) {
+    const a = this.menuAnchor(x, y, pane);
+    x = a.x; y = a.y;
+    const others = this.tabs.allPanes().filter((p) => p !== pane);
+    const tab = this.tabs.tabOf(pane);
+    const alone = !tab || tab.panes().length === 1;
+
+    contextMenu(x, y, [
+      ...others.map((p) => ({
+        label: `Prohodit s: ${this.paneLabel(p)}`, icon: 'layers',
+        action: () => this.swapPanes(pane, p)
+      })),
+      others.length ? { separator: true } : null,
+      { label: 'Rozdělit vodorovně…', icon: 'splitH', action: () => this.showSplitPicker('h', x, y) },
+      { label: 'Rozdělit svisle…', icon: 'splitV', action: () => this.showSplitPicker('v', x, y) },
+      { label: 'Odpojit do vlastního tabu', icon: 'externalLink', disabled: alone, action: () => this.detachPane(pane) },
+      { separator: true },
+      { label: 'Znovu připojit', icon: 'refresh', action: () => pane.reconnect() },
+      { label: 'Zavřít panel', icon: 'close', accel: 'Ctrl+Shift+W', danger: true, action: () => this.closePane(pane) }
+    ].filter(Boolean));
+  }
+
+  paneLabel(pane) {
+    const tab = this.tabs.tabOf(pane);
+    const sameName = !tab || tab.title === pane.title;
+    const where = tab && tab !== this.tabs.active && !sameName ? ` — ${tab.title}` : '';
+    return `${pane.title}${where}`;
+  }
+
+  menuAnchor(x, y, pane) {
+    if (Number.isFinite(x) && Number.isFinite(y)) return { x, y };
+    const r = pane.root.getBoundingClientRect();
+    return { x: r.left + 12, y: r.top + 12 };
+  }
+
+  /** Přesune běžící panel z jeho tabu do nové poloviny cílového panelu. */
+  async movePaneIntoSplit(moved, target, dir) {
+    if (moved === target) return;
+    const srcTab = this.tabs.tabOf(moved);
+    const dstTab = this.tabs.tabOf(target);
+    if (!srcTab || !dstTab) return;
+
+    const orphan = srcTab.removePane(moved);
+    dstTab.splitPane(target, dir, moved);
+    if (orphan) await this.tabs.closeTab(srcTab, true);
+    this.tabs.activate(dstTab);
+    this.setActivePane(moved);
+    this.persistState();
+  }
+
+  /** Prohodí obsah dvou panelů – i napříč taby. */
+  swapPanes(a, b) {
+    const ta = this.tabs.tabOf(a);
+    const tb = this.tabs.tabOf(b);
+    if (!ta || !tb || a === b) return;
+    const la = ta.findLeaf(a);
+    const lb = tb.findLeaf(b);
+    if (!la || !lb) return;
+
+    la.pane = b;
+    lb.pane = a;
+    ta.attachPane(b);
+    tb.attachPane(a);
+    if (ta.activePane === a) ta.activePane = b;
+    if (tb.activePane === b) tb.activePane = a;
+    ta.render();
+    ta.updateLabel();
+    if (tb !== ta) { tb.render(); tb.updateLabel(); }
+    const current = this.tabs.active;
+    if (current) this.setActivePane(current.activePane);
+    this.persistState();
+  }
+
+  /** Vyjme panel z rozděleného tabu a udělá z něj samostatný tab. */
+  detachPane(pane) {
+    const tab = this.tabs.tabOf(pane);
+    if (!tab || tab.panes().length === 1) return;
+    tab.removePane(pane);
+    const fresh = new Tab(this.tabs, pane);
+    this.tabs.add(fresh);
+    this.setActivePane(pane);
+    this.persistState();
   }
 
   async closePane(pane) {
@@ -432,7 +567,7 @@ class App {
       pane.title);
     this.remoteTree.nodes.clear();
     try {
-      const start = pane.cwd || await window.c3.files.home(target);
+      const start = pane.cwd || await window.smith.files.home(target);
       await this.remoteTree.navigate(start);
       this.remoteTree.bound = true;
     } catch (e) {
@@ -456,7 +591,7 @@ class App {
 
   typeInTerminal(text) {
     if (this.activePane && this.activePane.sessionId) {
-      window.c3.term.write(this.activePane.sessionId, text);
+      window.smith.term.write(this.activePane.sessionId, text);
       this.activePane.focus();
     }
   }
@@ -466,30 +601,30 @@ class App {
   /* ================================================================ */
 
   wireEvents() {
-    window.c3.term.onData(({ id, data }) => {
+    window.smith.term.onData(({ id, data }) => {
       const p = this.sessionPanes.get(id);
       if (p) p.write(data);
     });
-    window.c3.term.onStatus(({ id, status, detail }) => {
+    window.smith.term.onStatus(({ id, status, detail }) => {
       const p = this.sessionPanes.get(id);
       if (!p) return;
       p.setStatus(status, detail);
       if (status === 'connected' && p === this.activePane) this.bindFilesTo(p);
     });
-    window.c3.term.onCwd(({ id, cwd }) => {
+    window.smith.term.onCwd(({ id, cwd }) => {
       const p = this.sessionPanes.get(id);
       if (p) p.setCwd(cwd);
     });
-    window.c3.term.onExit(({ id, code, error }) => {
+    window.smith.term.onExit(({ id, code, error }) => {
       const p = this.sessionPanes.get(id);
       if (!p) return;
       p.setStatus('closed', error || null);
       p.showDisconnected(error || (code != null ? `Ukončeno s kódem ${code}` : 'Spojení uzavřeno'));
       this.sessionPanes.delete(id);
     });
-    window.c3.term.onPrompt((req) => this.handlePrompt(req));
+    window.smith.term.onPrompt((req) => this.handlePrompt(req));
 
-    window.c3.settings.onChange((s) => {
+    window.smith.settings.onChange((s) => {
       this.settings = s;
       applyTheme(s.appearance.theme);
       this.applyChromeSettings();
@@ -498,13 +633,13 @@ class App {
       this.localTree.render();
     });
 
-    window.c3.files.onProgress((s) => this.updateTransfer(s));
-    window.c3.files.onFinish((s) => this.finishTransfer(s));
-    window.c3.files.onAsk((q) => this.handleConflict(q));
-    window.c3.files.onWarn((w) => toast(w.message, { type: 'error' }));
-    window.c3.files.onUploaded(({ path }) => toast(`Uloženo na server: ${path}`, { type: 'ok' }));
+    window.smith.files.onProgress((s) => this.updateTransfer(s));
+    window.smith.files.onFinish((s) => this.finishTransfer(s));
+    window.smith.files.onAsk((q) => this.handleConflict(q));
+    window.smith.files.onWarn((w) => toast(w.message, { type: 'error' }));
+    window.smith.files.onUploaded(({ path }) => toast(`Uloženo na server: ${path}`, { type: 'ok' }));
 
-    window.c3.app.onCommand((cmd) => this.runCommand(cmd));
+    window.smith.app.onCommand((cmd) => this.runCommand(cmd));
 
     window.addEventListener('beforeunload', () => this.persistState());
     window.addEventListener('resize', () => {
@@ -539,7 +674,7 @@ class App {
           { id: 'accept', label: req.changed ? 'Přepsat a pokračovat' : 'Přijmout a uložit', primary: true, danger: req.changed }
         ]
       });
-      return window.c3.term.promptReply(id, promptId, { decision: res || 'reject' });
+      return window.smith.term.promptReply(id, promptId, { decision: res || 'reject' });
     }
 
     const inputs = req.prompts.map((p) => el('input', {
@@ -557,7 +692,7 @@ class App {
       title: req.title, icon: 'lock', width: 460, body, dismissable: true,
       buttons: [{ id: 'cancel', label: 'Zrušit' }, { id: 'ok', label: 'Přihlásit', primary: true }]
     });
-    window.c3.term.promptReply(id, promptId, res === 'ok'
+    window.smith.term.promptReply(id, promptId, res === 'ok'
       ? { answers: inputs.map((i) => i.value), remember: remember.checked, cancelled: false }
       : { cancelled: true, answers: [] });
   }
@@ -568,7 +703,7 @@ class App {
 
   async startTransfer(req) {
     try {
-      const res = await window.c3.files.transfer(req);
+      const res = await window.smith.files.transfer(req);
       if (res && res.renamed) {
         toast('Přesunuto', { type: 'ok' });
         return;
@@ -588,7 +723,7 @@ class App {
       const row = el('div', { class: 'tr-row' },
         el('span', { class: 'tr-ico', html: icon(s.move ? 'bolt' : 'upload', 15) }),
         el('div', { class: 'tr-main' }, label, bar, detail),
-        el('button', { class: 'icon-btn', title: 'Zrušit', html: icon('close', 14), onClick: () => window.c3.files.cancel(s.id) })
+        el('button', { class: 'icon-btn', title: 'Zrušit', html: icon('close', 14), onClick: () => window.smith.files.cancel(s.id) })
       );
       rec = { row, bar: bar.firstChild, label, detail };
       this.transfers.set(s.id, rec);
@@ -634,7 +769,7 @@ class App {
         { id: 'overwrite', label: 'Přepsat', primary: true }
       ]
     });
-    window.c3.files.answer(q.jobId, { action: res || 'skip', applyToAll: applyAll.checked });
+    window.smith.files.answer(q.jobId, { action: res || 'skip', applyToAll: applyAll.checked });
   }
 
   /* ================================================================ */
@@ -642,7 +777,7 @@ class App {
   /* ================================================================ */
 
   async updateSettings(patch) {
-    this.settings = await window.c3.settings.set(patch);
+    this.settings = await window.smith.settings.set(patch);
     return this.settings;
   }
 
@@ -654,7 +789,7 @@ class App {
   }
 
   async resetSettings() {
-    this.settings = await window.c3.settings.reset();
+    this.settings = await window.smith.settings.reset();
     this.fontSize = this.settings.terminal.fontSize;
     return this.settings;
   }
@@ -699,9 +834,9 @@ class App {
 
   updateWindowTitle() {
     const t = this.tabs && this.tabs.active ? this.tabs.active.title : null;
-    document.title = t ? `${t} — C3Term` : 'C3Term';
+    document.title = t ? `${t} — ShellSmith` : 'ShellSmith';
     const el2 = $('#tb-title');
-    if (el2) el2.textContent = t ? `${t} — C3Term` : 'C3Term';
+    if (el2) el2.textContent = t ? `${t} — ShellSmith` : 'ShellSmith';
   }
 
   async persistState() {
@@ -710,11 +845,11 @@ class App {
       const p = t.panes()[0];
       return p ? { opts: p.opts, title: t.customTitle } : null;
     }).filter(Boolean);
-    try { await window.c3.state.save({ tabs, sidebar: this.sidebarTab }); } catch (_) {}
+    try { await window.smith.state.save({ tabs, sidebar: this.sidebarTab }); } catch (_) {}
   }
 
   async restoreOrStart() {
-    const state = await window.c3.state.get();
+    const state = await window.smith.state.get();
     if (this.settings.behavior.restoreTabs && state.tabs && state.tabs.length) {
       for (const t of state.tabs.slice(0, 20)) {
         const pane = new TerminalPane(this, t.opts);
@@ -743,11 +878,13 @@ class App {
         const map = {
           t: () => this.newLocalTab(),
           n: () => this.sessions.editSession(null),
-          w: () => this.tabs.active && this.tabs.closeTab(this.tabs.active),
+          w: () => this.activePane ? this.closePane(this.activePane)
+                                   : this.tabs.active && this.tabs.closeTab(this.tabs.active),
+          q: () => this.tabs.active && this.tabs.closeTab(this.tabs.active),
           e: () => this.splitActive('v'),
           o: () => this.splitActive('h'),
           f: () => this.activePane && this.activePane.toggleSearch(true),
-          c: () => this.activePane && this.activePane.hasSelection() && window.c3.clipboard.write(this.activePane.selection()),
+          c: () => this.activePane && this.activePane.hasSelection() && window.smith.clipboard.write(this.activePane.selection()),
           v: () => this.activePane && this.activePane.pasteFromClipboard(),
           p: () => openSettings(this)
         };
@@ -801,12 +938,12 @@ class App {
   async quit() {
     // Potvrzení řeší main proces, ať se ptá stejně i při Alt+F4 nebo z panelu.
     await this.persistState();
-    window.c3.win.close();
+    window.smith.win.close();
   }
 }
 
 const app = new App();
-window.__c3app = app;
+window.__shellsmith = app;
 app.boot().catch((e) => {
   document.body.innerHTML = `<pre style="padding:24px;color:#e05252;font-family:monospace">Chyba při startu:\n${e.stack || e}</pre>`;
 });

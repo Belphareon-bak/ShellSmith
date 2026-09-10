@@ -38,9 +38,52 @@ export class TerminalPane {
     this.termHost = el('div', { class: 'term-host' });
     this.overlay = el('div', { class: 'pane-overlay', hidden: true });
     this.searchBar = this.buildSearchBar();
-    this.root = el('div', { class: 'pane', tabindex: '-1' }, this.searchBar, this.termHost, this.overlay);
+    this.header = this.buildHeader();
+    this.root = el('div', { class: 'pane', tabindex: '-1' },
+      this.header, this.searchBar, this.termHost, this.overlay);
 
     this.root.addEventListener('mousedown', () => this.app.setActivePane(this), true);
+  }
+
+  /**
+   * Lišta nad panelem. Ukazuje se jen v rozděleném tabu – tam je potřeba vědět,
+   * co v kterém panelu běží, umět to přepnout a panel zavřít jedním kliknutím.
+   */
+  buildHeader() {
+    this.headDot = el('span', { class: 'tab-dot' });
+    this.headIcon = el('span', { class: 'pane-head-ico' });
+    this.headTitle = el('span', { class: 'pane-head-title' });
+    return el('div', { class: 'pane-head', hidden: true },
+      this.headIcon, this.headDot, this.headTitle,
+      el('button', {
+        class: 'icon-btn tiny', title: 'Zvolit, co se v panelu zobrazí',
+        html: icon('layers', 13),
+        onClick: (e) => {
+          e.stopPropagation();
+          const r = e.currentTarget.getBoundingClientRect();
+          this.app.showPaneChooser(this, r.left, r.bottom + 2);
+        }
+      }),
+      el('button', {
+        class: 'icon-btn tiny pane-head-close', title: 'Zavřít panel (Ctrl+Shift+W)',
+        html: icon('close', 13),
+        onClick: (e) => { e.stopPropagation(); this.app.closePane(this); }
+      })
+    );
+  }
+
+  /** Hlavička dává smysl jen v rozděleném tabu. */
+  setSplitMode(on) {
+    this.header.hidden = !on;
+    this.updateHeader();
+  }
+
+  updateHeader() {
+    if (this.header.hidden) return;
+    this.headTitle.textContent = this.title;
+    this.headTitle.title = this.info && this.info.host ? `${this.title} — ${this.info.host}` : this.title;
+    this.headIcon.innerHTML = icon(this.opts.kind === 'ssh' ? 'server' : 'terminal', 13);
+    this.headDot.className = `tab-dot status-${this.status}`;
   }
 
   buildSearchBar() {
@@ -92,7 +135,7 @@ export class TerminalPane {
     this.searchAddon = new SearchAddon();
     this.term.loadAddon(this.fitAddon);
     this.term.loadAddon(this.searchAddon);
-    this.term.loadAddon(new WebLinksAddon((_e, uri) => window.c3.app.openExternal(uri)));
+    this.term.loadAddon(new WebLinksAddon((_e, uri) => window.smith.app.openExternal(uri)));
     const uni = new Unicode11Addon();
     this.term.loadAddon(uni);
     this.term.unicode.activeVersion = '11';
@@ -106,14 +149,18 @@ export class TerminalPane {
     } catch (_) { /* bez GPU akcelerace se jede na canvasu */ }
 
     this.term.attachCustomKeyEventHandler((e) => this.keyFilter(e));
-    this.term.onData((d) => this.sessionId && window.c3.term.write(this.sessionId, d));
-    this.term.onBinary((d) => this.sessionId && window.c3.term.write(this.sessionId, d));
+    this.term.onData((d) => this.sessionId && window.smith.term.write(this.sessionId, d));
+    this.term.onBinary((d) => this.sessionId && window.smith.term.write(this.sessionId, d));
     this.term.onTitleChange((t) => {
       // Pojmenovanou relaci nepřepisujeme tím, co si zvolí vzdálený shell –
       // uživatel chce v tabu vidět svůj název; titulek ze shellu jde do tooltipu.
       this.remoteTitle = t && t.trim() ? t.trim() : null;
-      if (this.opts.title) { this.onTitleChange && this.onTitleChange(this); return; }
-      if (this.remoteTitle) { this.title = this.remoteTitle; this.onTitleChange && this.onTitleChange(this); }
+      if (this.opts.title) { this.updateHeader(); this.onTitleChange && this.onTitleChange(this); return; }
+      if (this.remoteTitle) {
+        this.title = this.remoteTitle;
+        this.updateHeader();
+        this.onTitleChange && this.onTitleChange(this);
+      }
     });
     this.term.onBell(() => {
       if (this.app.settings.terminal.bell === 'visual') {
@@ -133,7 +180,7 @@ export class TerminalPane {
     this.setStatus('starting');
     this.fit();
     try {
-      const info = await window.c3.term.create(Object.assign({}, this.opts, {
+      const info = await window.smith.term.create(Object.assign({}, this.opts, {
         cols: this.term.cols, rows: this.term.rows
       }));
       this.sessionId = info.id;
@@ -154,7 +201,7 @@ export class TerminalPane {
   async reconcileStatus(info) {
     let current = info;
     try {
-      const live = await window.c3.term.list();
+      const live = await window.smith.term.list();
       current = live.find((s) => s.id === this.sessionId) || null;
     } catch (_) { /* zůstaneme u toho, co vrátilo vytvoření relace */ }
 
@@ -173,7 +220,7 @@ export class TerminalPane {
   async reconnect() {
     if (this.sessionId) {
       this.app.unregisterSession(this.sessionId);
-      try { await window.c3.term.close(this.sessionId); } catch (_) {}
+      try { await window.smith.term.close(this.sessionId); } catch (_) {}
       this.sessionId = null;
     }
     this.term.reset();
@@ -194,7 +241,7 @@ export class TerminalPane {
       clearTimeout(selTimer);
       selTimer = setTimeout(() => {
         const text = this.term.getSelection();
-        if (text) window.c3.clipboard.write(text);
+        if (text) window.smith.clipboard.write(text);
       }, 60);
     });
 
@@ -206,7 +253,7 @@ export class TerminalPane {
       const sel = this.term.getSelection();
       if (mode === 'menu') return this.showContextMenu(e.clientX, e.clientY);
       if (mode === 'copypaste' && sel) {
-        window.c3.clipboard.write(sel);
+        window.smith.clipboard.write(sel);
         this.term.clearSelection();
         return;
       }
@@ -217,7 +264,7 @@ export class TerminalPane {
     screen.addEventListener('mousedown', (e) => {
       if (e.button === 1 && s().middleClickPaste) {
         e.preventDefault();
-        window.c3.clipboard.readSelection().then((t) => { if (t) this.pasteText(t, true); });
+        window.smith.clipboard.readSelection().then((t) => { if (t) this.pasteText(t, true); });
       }
     });
 
@@ -232,23 +279,24 @@ export class TerminalPane {
   showContextMenu(x, y) {
     const sel = this.term.getSelection();
     contextMenu(x, y, [
-      { label: 'Kopírovat', icon: 'copy', accel: 'Ctrl+Shift+C', disabled: !sel, action: () => window.c3.clipboard.write(sel) },
+      { label: 'Kopírovat', icon: 'copy', accel: 'Ctrl+Shift+C', disabled: !sel, action: () => window.smith.clipboard.write(sel) },
       { label: 'Vložit', icon: 'clipboard', accel: 'Ctrl+Shift+V', action: () => this.pasteFromClipboard() },
       { label: 'Vybrat vše', action: () => this.term.selectAll() },
       { separator: true },
       { label: 'Hledat…', icon: 'search', accel: 'Ctrl+Shift+F', action: () => this.toggleSearch(true) },
       { label: 'Vymazat obrazovku', icon: 'refresh', action: () => this.term.clear() },
       { separator: true },
-      { label: 'Rozdělit vodorovně', icon: 'splitH', action: () => this.app.splitActive('h') },
-      { label: 'Rozdělit svisle', icon: 'splitV', action: () => this.app.splitActive('v') },
+      { label: 'Rozdělit vodorovně…', icon: 'splitH', action: () => this.app.showSplitPicker('h', x, y) },
+      { label: 'Rozdělit svisle…', icon: 'splitV', action: () => this.app.showSplitPicker('v', x, y) },
+      { label: 'Zvolit obsah panelu…', icon: 'layers', action: () => this.app.showPaneChooser(this, x, y) },
       { separator: true },
       { label: 'Znovu připojit', icon: 'refresh', action: () => this.reconnect() },
-      { label: 'Zavřít panel', icon: 'close', danger: true, action: () => this.app.closePane(this) }
+      { label: 'Zavřít panel', icon: 'close', accel: 'Ctrl+Shift+W', danger: true, action: () => this.app.closePane(this) }
     ]);
   }
 
   async pasteFromClipboard() {
-    const text = await window.c3.clipboard.read();
+    const text = await window.smith.clipboard.read();
     if (text) this.pasteText(text);
   }
 
@@ -309,7 +357,7 @@ export class TerminalPane {
     const r = this.root.getBoundingClientRect();
     if (r.width < 20 || r.height < 20) return;
     try { this.fitAddon.fit(); } catch (_) { return; }
-    if (this.sessionId) window.c3.term.resize(this.sessionId, this.term.cols, this.term.rows);
+    if (this.sessionId) window.smith.term.resize(this.sessionId, this.term.cols, this.term.rows);
     this.app.updateStatusBar();
   }
 
@@ -337,6 +385,7 @@ export class TerminalPane {
   setStatus(status, detail) {
     this.status = status;
     this.statusDetail = detail || null;
+    this.updateHeader();
     this.onStatusChange && this.onStatusChange(this);
     this.app.updateStatusBar();
   }
@@ -389,7 +438,7 @@ export class TerminalPane {
     try { this.ro && this.ro.disconnect(); } catch (_) {}
     if (this.sessionId) {
       this.app.unregisterSession(this.sessionId);
-      try { await window.c3.term.close(this.sessionId); } catch (_) {}
+      try { await window.smith.term.close(this.sessionId); } catch (_) {}
     }
     try { this.term && this.term.dispose(); } catch (_) {}
     this.root.remove();

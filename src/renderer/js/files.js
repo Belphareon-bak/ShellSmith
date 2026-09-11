@@ -1,5 +1,7 @@
 import { el, contextMenu, promptDialog, confirmDialog, toast, formatSize, formatTime } from './ui.js';
 import { icon } from './icons.js';
+import shell from '../../shared/shell.js';
+const { quoteShellArg } = shell;
 
 const collator = new Intl.Collator('cs', { numeric: true, sensitivity: 'base' });
 
@@ -158,22 +160,25 @@ export class FileTree {
 
   async loadDir(path, isRoot = false) {
     const n = this.node(path);
+    const target = this.target;
     if (n.loading) return;
     n.loading = true;
     n.error = null;
     if (isRoot) this.setStatus('Načítám…');
     this.render();
     try {
-      const res = await window.smith.files.list(this.target, path);
+      const res = await window.smith.files.list(target, path);
+      if (target !== this.target || this.nodes.get(path) !== n) return;
       n.children = sortEntries(res.entries);
       if (isRoot) this.setStatus(this.summary(n.children));
     } catch (e) {
+      if (target !== this.target || this.nodes.get(path) !== n) return;
       n.error = e.message;
       n.children = [];
       this.setStatus(`${path}: ${e.message}`, true);
     } finally {
       n.loading = false;
-      this.render();
+      if (target === this.target && this.nodes.get(path) === n) this.render();
     }
   }
 
@@ -569,12 +574,19 @@ export class FileTree {
       { label: 'Nový adresář…', icon: 'folderPlus', action: () => this.createFolder() },
       { separator: true },
       { label: 'Kopírovat cestu', icon: 'copy', action: () => window.smith.clipboard.write(sel.map((s) => s.path).join('\n')) },
-      { label: 'Vložit cestu do terminálu', icon: 'terminal', action: () => this.app.typeInTerminal(sel.map((s) => `'${s.path}'`).join(' ')) },
-      isDir ? { label: 'Přejít v terminálu (cd)', icon: 'play', action: () => this.app.typeInTerminal(`cd '${entry.path}'\n`) } : null,
+      { label: 'Vložit cestu do terminálu', icon: 'terminal', action: () => this.sendPaths(sel.map(s => s.path)) },
+      isDir ? { label: 'Přejít v terminálu (cd)', icon: 'play', action: () => this.sendPaths([entry.path], true) } : null,
       { separator: true },
       { label: 'Obnovit', icon: 'refresh', accel: 'F5', action: () => this.refresh() },
       { label: 'Smazat', icon: 'trash', accel: 'Del', danger: true, action: () => this.deleteSelected() }
     ].filter(Boolean));
+  }
+
+  sendPaths(paths, cd = false) {
+    try {
+      const args = paths.map(quoteShellArg).join(' ');
+      this.app.typeInTerminal(cd ? `cd -- ${args}\n` : args);
+    } catch (e) { toast(e.message, { type: 'error' }); }
   }
 
   showBackgroundMenu(x, y) {

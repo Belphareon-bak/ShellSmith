@@ -2,6 +2,10 @@ import '@xterm/xterm/css/xterm.css';
 import '../styles/app.css';
 
 import defaults from '../../shared/defaults.js';
+import shell from '../../shared/shell.js';
+import layoutState from '../../shared/layout.js';
+const { quoteShellArg, parseSshUrl } = shell;
+const { saveLayout, readLayout } = layoutState;
 import { el, $, contextMenu, modal, confirmDialog, toast, formatSize, formatSpeed, closeContextMenu } from './ui.js';
 import { icon } from './icons.js';
 import { applyTheme, THEMES } from './themes.js';
@@ -13,7 +17,7 @@ import { openSettings } from './settingsdlg.js';
 
 const { getPath, setPath, deepMerge } = defaults;
 
-class App {
+export class App {
   constructor() {
     this.settings = null;
     this.sessionPanes = new Map();   // sessionId -> TerminalPane
@@ -515,6 +519,7 @@ class App {
     await pane.dispose();
     if (orphan) this.tabs.closeTab(tab, true);
     else this.setActivePane(tab.activePane);
+    this.persistState();
   }
 
   setActivePane(pane) {
@@ -554,6 +559,7 @@ class App {
 
   /** Naváže hlavní panel souborů na relaci právě aktivního terminálu. */
   async bindFilesTo(pane) {
+    const revision = this.fileBindRevision = (this.fileBindRevision || 0) + 1;
     if (!pane || !pane.sessionId || !pane.supportsFiles()) return;
     // Dokud relace není přihlášená, nemá smysl otevírat SFTP kanál.
     if (pane.status !== 'connected') return;
@@ -568,9 +574,12 @@ class App {
     this.remoteTree.nodes.clear();
     try {
       const start = pane.cwd || await window.smith.files.home(target);
+      if (revision !== this.fileBindRevision || this.remoteTree.target !== target) return;
       await this.remoteTree.navigate(start);
+      if (revision !== this.fileBindRevision || this.remoteTree.target !== target) return;
       this.remoteTree.bound = true;
     } catch (e) {
+      if (revision !== this.fileBindRevision || this.remoteTree.target !== target) return;
       this.remoteTree.bound = false;
       this.remoteTree.setStatus(`Souborový panel: ${e.message}`, true);
     }
@@ -669,9 +678,9 @@ class App {
       const res = await modal({
         title: req.title, icon: 'alert', width: 560, body, dismissable: false,
         buttons: [
-          { id: 'reject', label: 'Odmítnout' },
+          { id: 'reject', label: 'Odmítnout', primary: req.changed },
           { id: 'once', label: 'Jen tentokrát' },
-          { id: 'accept', label: req.changed ? 'Přepsat a pokračovat' : 'Přijmout a uložit', primary: true, danger: req.changed }
+          { id: 'accept', label: req.changed ? 'Přepsat a pokračovat' : 'Přijmout a uložit', primary: !req.changed, danger: req.changed }
         ]
       });
       return window.smith.term.promptReply(id, promptId, { decision: res || 'reject' });
@@ -704,10 +713,6 @@ class App {
   async startTransfer(req) {
     try {
       const res = await window.smith.files.transfer(req);
-      if (res && res.renamed) {
-        toast('Přesunuto', { type: 'ok' });
-        return;
-      }
       if (res && res.id) this.updateTransfer(res);
     } catch (e) {
       toast(`Přenos selhal: ${e.message}`, { type: 'error' });
@@ -737,7 +742,7 @@ class App {
       : `${s.label} — ${s.currentFile || ''}`;
     rec.detail.textContent = s.state === 'scanning'
       ? `${s.filesTotal} souborů`
-      : `${s.filesDone}/${s.filesTotal} · ${formatSize(s.bytesDone)} / ${formatSize(s.bytesTotal)} · ${formatSpeed(s.speed)}`;
+      : `${s.filesDone}/${s.filesTotal}${s.filesSkipped ? ` · přeskočeno ${s.filesSkipped}` : ''} · ${formatSize(s.bytesDone)} / ${formatSize(s.bytesTotal)} · ${formatSpeed(s.speed)}`;
   }
 
   finishTransfer(s) {
@@ -748,6 +753,7 @@ class App {
     }
     if (!this.transfers.size) document.body.classList.remove('has-transfers');
     if (s.state === 'error') toast(`Přenos selhal: ${s.error}`, { type: 'error' });
+    else if (s.state === 'partial') toast(`Přeneseno částečně: ${s.filesDone} souborů, přeskočeno ${s.filesSkipped || 0}${s.error ? ` — ${s.error}` : ''}`, { type: 'error' });
     else if (s.state === 'cancelled') toast('Přenos zrušen');
     else toast(`Hotovo: ${s.filesDone} souborů (${formatSize(s.bytesDone)})`, { type: 'ok' });
     this.remoteTree.refresh();
@@ -840,26 +846,49 @@ class App {
   }
 
   async persistState() {
-    if (!this.tabs) return;
-    const tabs = this.tabs.tabs.map((t) => {
-      const p = t.panes()[0];
-      return p ? { opts: p.opts, title: t.customTitle } : null;
-    }).filter(Boolean);
-    try { await window.smith.state.save({ tabs, sidebar: this.sidebarTab }); } catch (_) {}
+    if (!this.tabs || this.restoringState) return;
+    const tabs = this.tabs.tabs.filter(t => t.layout).map(t => ({
+      layout: saveLayout(t.layout), title: t.customTitle,
+      activePane: Math.max(0, t.panes().indexOf(t.activePane))
+    }));
+    try { await window.smith.state.save({ version: 2, tabs, activeTab: this.tabs.tabs.indexOf(this.tabs.active), sidebar: this.sidebarTab }); }
+    catch (e) { toast(`Nelze uložit rozvržení: ${e.message}`, { type: 'error' }); }
   }
 
   async restoreOrStart() {
     const state = await window.smith.state.get();
     if (this.settings.behavior.restoreTabs && state.tabs && state.tabs.length) {
-      for (const t of state.tabs.slice(0, 20)) {
-        const pane = new TerminalPane(this, t.opts);
-        const tab = new Tab(this.tabs, pane);
-        if (t.title) tab.customTitle = t.title;
-        this.tabs.add(tab, false);
-        await pane.start();
+      this.restoringState = true;
+      try {
+        for (const t of state.tabs.slice(0, 20)) {
+          try {
+            const raw = readLayout(t);
+            const panes = [];
+            const hydrate = node => {
+              if (node.type === 'leaf') {
+                const pane = new TerminalPane(this, node.opts);
+                panes.push(pane);
+                return { type: 'leaf', pane };
+              }
+              return { ...node, a: hydrate(node.a), b: hydrate(node.b) };
+            };
+            const layout = hydrate(raw);
+            const tab = new Tab(this.tabs, panes[0]);
+            tab.layout = layout;
+            for (const p of panes) tab.attachPane(p);
+            tab.activePane = panes[t.activePane] || panes[0];
+            if (t.title) tab.customTitle = t.title;
+            tab.render();
+            this.tabs.add(tab, false);
+            for (const p of panes) await p.start();
+          } catch (e) { toast(`Nelze obnovit tab: ${e.message}`, { type: 'error' }); }
+        }
+        if (this.tabs.tabs.length) this.tabs.activate(this.tabs.tabs[state.activeTab] || this.tabs.tabs[0]);
+        if (state.sidebar === 'files' && this.sidebarTab !== 'files') this.selectSidebar('files');
+      } finally {
+        this.restoringState = false;
       }
-      this.tabs.activate(this.tabs.tabs[0]);
-      return;
+      if (this.tabs.tabs.length) return;
     }
     if (this.settings.behavior.startupTab === 'local') await this.newLocalTab();
   }
@@ -920,12 +949,13 @@ class App {
     if (cmd.type === 'new-local') return void this.newLocalTab();
     if (cmd.type === 'sessions') return this.selectSidebar('sessions');
     if (cmd.type === 'url') {
-      const m = /^ssh:\/\/(?:([^@/:]+)(?::[^@/]*)?@)?([^/:\s]+)(?::(\d+))?(\/.*)?$/i.exec(cmd.url);
-      if (!m) return toast(`Odkazu nerozumím: ${cmd.url}`, { type: 'error' });
-      const [, user, host, port, path] = m;
-      const cd = path && path !== '/' ? `cd '${decodeURIComponent(path)}'` : '';
+      let parsed;
+      try { parsed = parseSshUrl(cmd.url); }
+      catch (e) { return toast(`Odkazu nerozumím: ${e.message}`, { type: 'error' }); }
+      const { username: user, host, port, path } = parsed;
+      const cd = path && path !== '/' ? `cd -- ${quoteShellArg(path)}` : '';
       const saved = this.sessions.items.find((i) =>
-        i.kind === 'ssh' && i.host === host && (!user || i.username === user));
+        i.kind === 'ssh' && i.host.toLowerCase() === host.toLowerCase() && (Number(i.port) || 22) === port && (!user || i.username === user));
       if (saved) return void this.connectSaved(cd ? Object.assign({}, saved, { initialCommand: cd }) : saved);
       this.connectSaved({
         kind: 'ssh', host, port: Number(port) || 22, username: user || '',
@@ -941,9 +971,3 @@ class App {
     window.smith.win.close();
   }
 }
-
-const app = new App();
-window.__shellsmith = app;
-app.boot().catch((e) => {
-  document.body.innerHTML = `<pre style="padding:24px;color:#e05252;font-family:monospace">Chyba při startu:\n${e.stack || e}</pre>`;
-});

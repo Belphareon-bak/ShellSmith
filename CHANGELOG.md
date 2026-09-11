@@ -1,5 +1,43 @@
 # Změny
 
+## 1.1.2 — 2026-09-11
+
+### Spuštění z nabídky plochy
+- **Oprava:** aplikace nešla spustit z nabídky ani z panelu, zatímco
+  z terminálu naskočila. Ubuntu 24.04 nedovolí neprivilegovaným procesům
+  vytvořit user namespace, takže Electron sáhne po `chrome-sandbox`, který
+  v `node_modules` není setuid root. Z terminálu to projde (shell běží
+  v nevynucovaném profilu AppArmoru), z nabídky ne – plasmashell předá
+  potomkům svůj enforcing profil.
+- Spouštěč na situaci přijde sám a zeptá se, jestli má aplikaci spustit bez
+  sandboxu; volbu si zapamatuje v `~/.config/shellsmith/allow-no-sandbox`.
+  Trvalé řešení je profil AppArmor – šablona je v
+  `packaging/shellsmith.apparmor.in`, `install.sh` z ní vyrobí soubor
+  s doplněnou cestou.
+- Spouštěč už nikdy neskončí tiše: chybějící předpoklady ohlásí i okýnkem
+  (`kdialog`/`zenity`/`notify-send`), když neběží v terminálu.
+- **Oprava:** `install.sh` nechával po `npm ci` prázdný
+  `node_modules/electron/dist`, protože Electron od verze 44 nepublikuje
+  `postinstall`. Binárku teď dotahuje sám a bez ní instalaci zastaví.
+
+### Vzhled
+- Classic se vrátil ke světlé měkké šedé podle původního MobaXtermu. Tmavá
+  varianta z 1.1.1 působila proti tmavému terminálu zamlženě; plochy se teď
+  liší jen o pár tónů, text je tlumená břidlice místo černé a terminál zůstává
+  tmavý, ale ne uhlově černý.
+
+
+## 1.1.1 — 2026-09-11
+
+- Classic používá tlumené šedé plochy a tmavý šedý terminál; Daylight zůstává světlým motivem.
+- Cesty ze souborového panelu a SSH odkazů se bezpečně escapují; řídicí znaky se odmítají. Výběr uložené relace z odkazu respektuje port.
+- Kopie se dokončují přes dočasný soubor, přepisy přes SFTP vyžadují atomické přejmenování. Přesuny respektují kolize a nemažou přeskočené soubory.
+- Přenosy zachovávají práva nových adresářů a symbolické odkazy, rozlišují částečné výsledky a chyby skenu. Zrušení funguje i při čekání na konflikt.
+- Opraveno přihlášení šifrovanými OpenSSH klíči, dekódování děleného UTF-8, dělené OSC 7 a ukončování čekajících relací.
+- Obnova zachovává celý split, poměry a aktivní panely. Opožděné odpovědi souborového panelu nepřepisují novější výběr relace.
+- IPC ověřuje odesílatele a hlavní rámec. Změněný otisk serveru má výchozí akci Odmítnout; poškozené otisky blokují připojení.
+- Aktualizován Electron a build nástroje; chyba nativního rebuildu již není maskovaná. Doplněny regresní testy, integrační SSH/SFTP, Electron smoke a CI.
+
 ## 1.1.0 — 2026-09-10
 
 ### Přejmenování

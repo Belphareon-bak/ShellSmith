@@ -6,7 +6,7 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const watch = process.argv.includes('--watch');
 
 const options = {
-  entryPoints: [path.join(root, 'src/renderer/js/app.js')],
+  entryPoints: [path.join(root, 'src/renderer/js/boot.js')],
   bundle: true,
   outfile: path.join(root, 'src/renderer/dist/bundle.js'),
   format: 'iife',

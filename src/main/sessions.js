@@ -4,8 +4,9 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
+const { StringDecoder } = require('string_decoder');
 const pty = require('node-pty');
-const { Client } = require('ssh2');
+const { Client, utils: { parseKey } } = require('ssh2');
 const store = require('./store');
 
 let seq = 0;
@@ -54,8 +55,8 @@ class BaseSession extends EventEmitter {
    * server v režimu strict KEX takové spojení okamžitě ukončí.
    */
   ready() {
-    if (this.status === 'connected') return Promise.resolve();
     if (this.closed) return Promise.reject(new Error('Relace není připojená'));
+    if (this.status === 'connected') return Promise.resolve();
     if (!this._ready) {
       this._ready = new Promise((res, rej) => { this._readyRes = res; this._readyRej = rej; });
     }
@@ -75,7 +76,11 @@ class BaseSession extends EventEmitter {
   }
 
   pushData(chunk) {
-    const cwd = extractCwd(chunk);
+    const combined = (this._oscTail || '') + chunk;
+    const cwd = extractCwd(combined);
+    const start = combined.lastIndexOf('\x1b]7;');
+    this._oscTail = start >= 0 && !/[\x07]/.test(combined.slice(start)) && !combined.slice(start).includes('\x1b\\')
+      ? combined.slice(start).slice(-16384) : combined.slice(-5);
     if (cwd && cwd !== this.cwd) { this.cwd = cwd; this.emit('cwd', cwd); }
     this.emit('data', chunk);
   }
@@ -128,6 +133,7 @@ class LocalSession extends BaseSession {
 
     this.proc.onData((d) => this.pushData(d));
     this.proc.onExit(({ exitCode, signal }) => {
+      clearInterval(this.cwdTimer);
       this.setStatus('closed', signal ? `signál ${signal}` : `kód ${exitCode}`);
       this.closed = true;
       this.emit('exit', { code: exitCode, signal });
@@ -167,6 +173,8 @@ class LocalSession extends BaseSession {
   }
 
   close() {
+    if (this.closed) return;
+    this.setStatus('closed');
     this.closed = true;
     clearInterval(this.cwdTimer);
     try { this.proc && this.proc.kill(); } catch (_) {}
@@ -182,8 +190,12 @@ const HOOK_MARKER = '\u001b]777;ss\u0007';
 
 const KNOWN_HOSTS = 'known_hosts.json';
 function knownHostsRead() {
-  try { return JSON.parse(fs.readFileSync(path.join(store.configDir(), KNOWN_HOSTS), 'utf8')); }
-  catch (_) { return {}; }
+  try {
+    const db = JSON.parse(fs.readFileSync(path.join(store.configDir(), KNOWN_HOSTS), 'utf8'));
+    if (!db || Array.isArray(db) || typeof db !== 'object' || Object.values(db).some(v => !v || typeof v.fp !== 'string')) throw new Error('Neplatný formát otisků');
+    return db;
+  }
+  catch (e) { if (e.code === 'ENOENT') return {}; throw new Error(`Nelze načíst otisky serverů: ${e.message}`); }
 }
 function knownHostsWrite(db) {
   const p = path.join(store.configDir(), KNOWN_HOSTS);
@@ -213,6 +225,7 @@ class SshSession extends BaseSession {
 
   /** Renderer se ptá uživatele (heslo, 2FA, důvěra k host key). */
   ask(request) {
+    if (this.closed) return Promise.resolve({ cancelled: true, decision: 'reject', answers: [] });
     return new Promise((resolve) => {
       const promptId = nextId();
       this._pending = this._pending || new Map();
@@ -236,9 +249,7 @@ class SshSession extends BaseSession {
       await this.connectClient(this.config, sock);
       await this.openShell();
     } catch (err) {
-      this.setStatus('error', err && err.message ? err.message : String(err));
-      this.emit('exit', { code: null, error: String(err && err.message || err) });
-      this.closed = true;
+      this.close('error', err && err.message ? err.message : String(err));
     }
     return this;
   }
@@ -259,6 +270,7 @@ class SshSession extends BaseSession {
   }
 
   async connectClient(cfg, sock, clientOverride) {
+    if (this.closed) throw new Error('Připojení zrušeno');
     const settings = store.getSettings();
     const client = clientOverride || new Client();
     if (!clientOverride) this.client = client;
@@ -281,7 +293,9 @@ class SshSession extends BaseSession {
     const hostKeyId = `${opts.host}:${opts.port}`;
     opts.hostVerifier = (key, callback) => {
       const fp = fingerprint(key);
-      const db = knownHostsRead();
+      let db;
+      try { db = knownHostsRead(); }
+      catch (e) { this.setStatus('error', e.message); return callback(false); }
       const known = db[hostKeyId];
       if (known && known.fp === fp) return callback(true);
       const changed = !!known;
@@ -293,10 +307,13 @@ class SshSession extends BaseSession {
         previous: known ? `SHA256:${known.fp}` : null,
         changed
       }).then((ans) => {
-        if (!ans || ans.decision === 'reject') return callback(false);
+        if (this.closed || !ans || !['once', 'accept'].includes(ans.decision)) return callback(false);
         if (ans.decision === 'accept') {
-          db[hostKeyId] = { fp, at: Date.now() };
-          try { knownHostsWrite(db); } catch (e) { console.error('[ssh] known_hosts:', e.message); }
+          // Během dialogu mohla jiná relace uložit další otisk.
+          const current = knownHostsRead();
+          if (current[hostKeyId] && current[hostKeyId].fp !== known?.fp && current[hostKeyId].fp !== fp) return callback(false);
+          current[hostKeyId] = { fp, at: Date.now() };
+          knownHostsWrite(current);
         }
         callback(true); // 'once' i 'accept' pokračují
       }).catch(() => callback(false));
@@ -315,7 +332,8 @@ class SshSession extends BaseSession {
       if (!keyPath) throw new Error('Není zadána cesta k privátnímu klíči');
       opts.privateKey = fs.readFileSync(keyPath);
       let pass = cfg.sessionRef ? store.getSecret(`${cfg.sessionRef}:passphrase`) : null;
-      if (!pass && /ENCRYPTED/.test(opts.privateKey.toString('utf8', 0, 200))) {
+      let parsed = parseKey(opts.privateKey, pass || undefined);
+      if (parsed instanceof Error && /encrypted|passphrase|decrypt/i.test(parsed.message)) {
         const ans = await this.ask({
           type: 'input', title: 'Privátní klíč je zašifrovaný',
           detail: path.basename(keyPath),
@@ -324,8 +342,11 @@ class SshSession extends BaseSession {
         });
         if (!ans || ans.cancelled) throw new Error('Připojení zrušeno uživatelem');
         pass = ans.answers[0];
+        parsed = parseKey(opts.privateKey, pass);
+        if (parsed instanceof Error) throw new Error(`Nelze odemknout privátní klíč: ${parsed.message}`);
         if (ans.remember && cfg.sessionRef) store.setSecret(`${cfg.sessionRef}:passphrase`, pass);
       }
+      if (parsed instanceof Error) throw new Error(`Neplatný privátní klíč: ${parsed.message}`);
       if (pass) opts.passphrase = pass;
     }
     if (authType === 'password') {
@@ -356,9 +377,12 @@ class SshSession extends BaseSession {
       }).then((ans) => finish(ans && !ans.cancelled ? ans.answers : []));
     });
 
+    if (this.closed) throw new Error('Připojení zrušeno');
     await new Promise((resolve, reject) => {
       let settled = false;
-      const done = (fn, arg) => { if (!settled) { settled = true; fn(arg); } };
+      const onExit = () => done(reject, new Error('Připojení zrušeno'));
+      const done = (fn, arg) => { if (!settled) { settled = true; this.removeListener('exit', onExit); fn(arg); } };
+      this.once('exit', onExit);
       client.once('ready', () => done(resolve));
       client.once('error', (err) => done(reject, err));
       client.once('close', () => done(reject, new Error('Spojení bylo uzavřeno před přihlášením')));
@@ -368,13 +392,11 @@ class SshSession extends BaseSession {
     if (!clientOverride) {
       client.on('error', (err) => {
         if (this.closed) return;
-        this.setStatus('error', err.message);
+        this.close('error', err.message);
       });
       client.on('close', () => {
         if (this.closed) return;
-        this.closed = true;
-        this.setStatus('closed', 'spojení ukončeno');
-        this.emit('exit', { code: null });
+        this.close();
       });
     }
     return client;
@@ -389,16 +411,19 @@ class SshSession extends BaseSession {
         modes: {}
       }, (err, stream) => {
         if (err) return reject(err);
+        if (this.closed) { stream.end(); return reject(new Error('Připojení zrušeno')); }
         this.stream = stream;
         this.setStatus('connected');
-        stream.on('data', (d) => this.pushData(d.toString('utf8')));
-        stream.stderr && stream.stderr.on('data', (d) => this.pushData(d.toString('utf8')));
+        const attach = source => {
+          if (!source) return;
+          const decoder = new StringDecoder('utf8');
+          source.on('data', d => { const text = decoder.write(d); if (text) this.pushData(text); });
+          source.on('end', () => { const text = decoder.end(); if (text) this.pushData(text); });
+        };
+        attach(stream); attach(stream.stderr);
         stream.on('close', () => {
           if (this.closed) return;
-          this.closed = true;
-          this.setStatus('closed', 'shell ukončen');
-          this.emit('exit', { code: 0 });
-          try { this.client.end(); } catch (_) {}
+          this.close('closed', 'shell ukončen');
         });
         if (settings.ssh.injectOsc7) this.injectCwdHook();
         else this.afterStartup();
@@ -463,12 +488,12 @@ class SshSession extends BaseSession {
 
   /** Po dokončení startu odešleme uvítací příkaz relace, pokud je nastavený. */
   afterStartup() {
-    if (this._startupDone) return;
+    if (this._startupDone || this.closed) return;
     this._startupDone = true;
     const cmd = this.config.initialCommand;
     if (cmd && String(cmd).trim()) {
-      setTimeout(() => {
-        try { this.stream.write(String(cmd).replace(/\n?$/, '\n')); } catch (_) {}
+      this.startupTimer = setTimeout(() => {
+        if (!this.closed) this.write(String(cmd).replace(/\n?$/, '\n'));
       }, 200);
     }
   }
@@ -508,11 +533,18 @@ class SshSession extends BaseSession {
     try { if (this.stream && !this.closed) this.stream.setWindow(rows, cols, 0, 0); } catch (_) {}
   }
 
-  close() {
+  close(status = 'closed', detail = 'spojení ukončeno') {
+    if (this.closed) return;
+    this.setStatus(status, detail);
     this.closed = true;
+    clearTimeout(this.startupTimer);
+    if (this.capture) { clearTimeout(this.capture.timer); this.capture = null; }
+    for (const resolve of this._pending?.values() || []) resolve({ cancelled: true, decision: 'reject', answers: [] });
+    this._pending?.clear();
     try { this.stream && this.stream.end(); } catch (_) {}
     try { this.client && this.client.end(); } catch (_) {}
     for (const h of this.hopClients) { try { h.end(); } catch (_) {} }
+    this.emit('exit', { code: null, error: status === 'error' ? detail : undefined });
   }
 }
 
@@ -529,7 +561,7 @@ class SessionManager extends EventEmitter {
     for (const ev of ['data', 'status', 'cwd', 'exit', 'prompt']) {
       s.on(ev, (payload) => this.emit(ev, s.id, payload));
     }
-    s.on('exit', () => setTimeout(() => this.sessions.delete(s.id), 2000));
+    s.on('exit', () => setTimeout(() => this.sessions.delete(s.id), 2000).unref?.());
     Promise.resolve(s.start()).catch((e) => console.error('[sessions] start:', e));
     return s;
   }

@@ -1,0 +1,22 @@
+# Profil AppArmor pro ShellSmith spouštěný ze zdrojového stromu.
+#
+# Ubuntu 24.04 nedovolí neprivilegovaným procesům vytvořit user namespace
+# (kernel.apparmor_restrict_unprivileged_userns=1). Electron pak nemůže
+# postavit svůj sandbox a ukončí se dřív, než otevře okno – z nabídky plochy
+# to vypadá, že se nestalo nic. Tenhle profil povolí userns právě jen binárce
+# Electronu v uvedené cestě; nic jiného nezmění.
+#
+# Instalace:
+#   sudo install -m 644 @PROFILE@ /etc/apparmor.d/shellsmith
+#   sudo apparmor_parser -r /etc/apparmor.d/shellsmith
+#
+# Odebrání:
+#   sudo rm /etc/apparmor.d/shellsmith && sudo systemctl reload apparmor
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile shellsmith @ELECTRON@ flags=(unconfined) {
+  userns,
+  include if exists <local/shellsmith>
+}

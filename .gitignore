@@ -4,3 +4,6 @@ src/renderer/dist/
 *.log
 *.tmp
 .DS_Store
+
+# Profil AppArmor se generuje z .in šablony s absolutní cestou ke stroji
+packaging/shellsmith.apparmor

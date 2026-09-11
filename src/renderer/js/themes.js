@@ -57,44 +57,47 @@ export const THEMES = {
   'moba-classic': {
     name: 'MobaXterm Classic',
     dark: false,
-    description: 'Světlé rozhraní a černý terminál – vzhled MobaXtermu hned po instalaci.',
+    description: 'Měkká světlá šedá s tmavým terminálem – vzhled původního MobaXtermu bez ostrých přechodů.',
     ui: {
-      '--bg': '#f0f0f0',
-      '--bg-2': '#e4e4e4',
-      '--panel': '#f7f7f7',
-      '--panel-2': '#e9e9e9',
-      '--titlebar': '#dfe4ea',
-      '--tabbar': '#e9edf1',
-      '--border': '#bcc2c9',
-      '--border-soft': '#d3d8dd',
-      '--text': '#1f2328',
-      '--text-dim': '#5a6068',
-      '--text-faint': '#8b9098',
-      '--accent': '#1f6fb2',
-      '--accent-2': '#2b86d3',
+      // Plochy se od sebe liší jen o pár tónů, aby rozhraní nikde „neřezalo".
+      '--bg': '#e9ecef',
+      '--bg-2': '#e0e4e8',
+      '--panel': '#f1f3f5',
+      '--panel-2': '#e5e9ed',
+      '--titlebar': '#dfe4e9',
+      '--tabbar': '#e2e6ea',
+      '--border': '#c8cfd6',
+      '--border-soft': '#dbe0e5',
+      // Text není černý – tlumená břidlice drží kontrast v příjemné míře.
+      '--text': '#2f373f',
+      '--text-dim': '#5f6a75',
+      '--text-faint': '#8d97a1',
+      '--accent': '#3f6f9f',
+      '--accent-2': '#4e81b3',
       '--accent-fg': '#ffffff',
-      '--hover': '#dce6f0',
-      '--sel': '#cfe3f7',
-      '--sel-fg': '#0d2c46',
-      '--danger': '#c33',
-      '--ok': '#2e7d32',
-      '--warn': '#b8860b',
-      '--tab-active': '#ffffff',
-      '--tab-inactive': '#dde3e9',
-      '--scroll': '#b4bcc4',
-      '--shadow': 'rgba(0,0,0,.25)'
+      '--hover': '#dde4ea',
+      '--sel': '#cfdfee',
+      '--sel-fg': '#1e3a52',
+      '--danger': '#a0453e',
+      '--ok': '#437a52',
+      '--warn': '#8a6a25',
+      '--tab-active': '#f1f3f5',
+      '--tab-inactive': '#dde2e7',
+      '--scroll': '#bfc7cf',
+      '--shadow': 'rgba(0,0,0,.16)'
     },
     term: Object.assign({}, ANSI_CLASSIC, {
-      background: '#000000',
-      foreground: '#cccccc',
-      cursor: '#4ee44e',
-      cursorAccent: '#000000',
-      selectionBackground: '#3d5a80',
-      selectionForeground: '#ffffff'
+      // Terminál zůstává tmavý, ale ne uhlově černý – proti světlému
+      // rozhraní by čistá čerň působila jako díra.
+      background: '#1d232a',
+      foreground: '#cfd5db',
+      cursor: '#93bd83',
+      cursorAccent: '#1d232a',
+      selectionBackground: '#3c5a79',
+      selectionForeground: '#f2f5f8'
     })
   },
 
-  /* ---------------------------------------------------------------- */
   'ss-nocturne': {
     name: 'ShellSmith Nocturne',
     dark: true,

@@ -16,7 +16,8 @@ function typeFromMode(mode) {
   switch (mode & S_IFMT) {
     case 0o040000: return 'dir';
     case 0o120000: return 'link';
-    default: return 'file';
+    case 0o100000: return 'file';
+    default: return 'other';
   }
 }
 
@@ -53,28 +54,36 @@ class LocalAdapter {
           mode: st.mode & 0o7777, modeStr: modeString(st.mode & 0o7777, type),
           uid: st.uid, gid: st.gid
         });
-      } catch (_) { /* zmizelo mezi readdir a lstat */ }
+      } catch (e) { if (e.code !== 'ENOENT') throw e; }
     }
     return out;
   }
 
   async stat(p) {
     const st = await fsp.lstat(p);
-    const type = st.isDirectory() ? 'dir' : st.isSymbolicLink() ? 'link' : 'file';
+    const type = typeFromMode(st.mode);
     return { path: p, type, size: st.size, mtime: st.mtimeMs, mode: st.mode & 0o7777 };
   }
 
-  async mkdir(p) { await fsp.mkdir(p, { recursive: true }); }
+  async mkdir(p, mode = 0o777) { await fsp.mkdir(p, { recursive: true, mode }); }
   async rename(from, to) { await fsp.rename(from, to); }
+  async publish(from, to, overwrite = false) {
+    if (overwrite) return fsp.rename(from, to);
+    // link vytvoří cíl výhradně, takže souběžně vzniklý soubor nepřepíšeme.
+    await fsp.link(from, to);
+    await fsp.unlink(from);
+  }
+  async readlink(p) { return fsp.readlink(p); }
+  async symlink(target, p) { await fsp.symlink(target, p); }
   async chmod(p, mode) { await fsp.chmod(p, mode); }
   async unlink(p) { await fsp.unlink(p); }
   async rmdir(p) { await fsp.rmdir(p); }
-  async exists(p) { try { await fsp.lstat(p); return true; } catch (_) { return false; } }
+  async exists(p) { try { await fsp.lstat(p); return true; } catch (e) { if (e.code === 'ENOENT') return false; throw e; } }
   async readFile(p) { return await fsp.readFile(p); }
   async writeFile(p, data) { await fsp.writeFile(p, data); }
 
   createReadStream(p) { return fs.createReadStream(p); }
-  createWriteStream(p, mode) { return fs.createWriteStream(p, mode ? { mode } : undefined); }
+  createWriteStream(p, mode = 0o600, flags = 'w') { return fs.createWriteStream(p, { mode, flags }); }
 }
 
 /* ------------------------------------------------------------------ */
@@ -143,21 +152,33 @@ class SftpAdapter {
     };
   }
 
-  async mkdir(p) {
+  async mkdir(p, mode = 0o777) {
     // SFTP neumí `-p`, poskládáme cestu po segmentech.
     const parts = p.split('/').filter(Boolean);
     let cur = p.startsWith('/') ? '' : '.';
     for (const part of parts) {
       cur = cur + '/' + part;
-      try { await P((cb) => this.sftp.mkdir(cur, cb)); }
-      catch (e) { if (!(await this.exists(cur))) throw e; }
+      try { await P((cb) => this.sftp.mkdir(cur, { mode }, cb)); }
+      catch (e) { if (!(await this.exists(cur)) || (await this.stat(cur)).type !== 'dir') throw e; }
     }
   }
   async rename(from, to) { await P((cb) => this.sftp.rename(from, to, cb)); }
+  async publish(from, to, overwrite = false) {
+    if (!overwrite) return this.rename(from, to); // SFTP v3 odmítne existující cíl.
+    try { await P((cb) => this.sftp.ext_openssh_rename(from, to, cb)); }
+    catch (e) {
+      if (e.code === 8 || /unsupported|not support/i.test(e.message)) {
+        throw new Error('Server nepodporuje atomické nahrazení. Zvolte jiný název; původní soubor zůstal zachován.');
+      }
+      throw e;
+    }
+  }
+  async readlink(p) { return P((cb) => this.sftp.readlink(p, cb)); }
+  async symlink(target, p) { await P((cb) => this.sftp.symlink(target, p, cb)); }
   async chmod(p, mode) { await P((cb) => this.sftp.chmod(p, mode, cb)); }
   async unlink(p) { await P((cb) => this.sftp.unlink(p, cb)); }
   async rmdir(p) { await P((cb) => this.sftp.rmdir(p, cb)); }
-  async exists(p) { try { await P((cb) => this.sftp.lstat(p, cb)); return true; } catch (_) { return false; } }
+  async exists(p) { try { await P((cb) => this.sftp.lstat(p, cb)); return true; } catch (e) { if (e.code === 2 || e.code === 'ENOENT') return false; throw e; } }
   async readFile(p) {
     const chunks = [];
     const rs = this.sftp.createReadStream(p);
@@ -173,8 +194,8 @@ class SftpAdapter {
   }
 
   createReadStream(p) { return this.sftp.createReadStream(p, { highWaterMark: 1 << 17 }); }
-  createWriteStream(p, mode) {
-    return this.sftp.createWriteStream(p, Object.assign({ highWaterMark: 1 << 17 }, mode ? { mode } : {}));
+  createWriteStream(p, mode = 0o600, flags = 'w') {
+    return this.sftp.createWriteStream(p, { highWaterMark: 1 << 17, mode, flags });
   }
 }
 

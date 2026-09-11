@@ -4,17 +4,88 @@ set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 ELECTRON="$APP_DIR/node_modules/electron/dist/electron"
+SANDBOX="$APP_DIR/node_modules/electron/dist/chrome-sandbox"
+CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/shellsmith"
+AA_PROFILE=/etc/apparmor.d/shellsmith
 
-if [ ! -x "$ELECTRON" ]; then
-  echo "ShellSmith: chybí závislosti. Spusťte v $APP_DIR příkaz: npm install" >&2
-  exit 1
-fi
-if [ ! -f "$APP_DIR/src/renderer/dist/bundle.js" ]; then
-  echo "ShellSmith: chybí sestavené rozhraní. Spusťte v $APP_DIR příkaz: npm run build:renderer" >&2
-  exit 1
+# Spuštění z nabídky plochy nemá kam vypsat chybu, takže hlásíme i okýnkem –
+# jinak to vypadá, že se „nic nestalo".
+gui() { [ ! -t 2 ]; }
+
+notify_error() {
+  echo "ShellSmith: $1" >&2
+  if gui; then
+    if command -v kdialog >/dev/null; then kdialog --title ShellSmith --error "$1" >/dev/null 2>&1 &
+    elif command -v zenity >/dev/null; then zenity --error --title=ShellSmith --text="$1" >/dev/null 2>&1 &
+    elif command -v notify-send >/dev/null; then notify-send -u critical ShellSmith "$1" &
+    fi
+  fi
+}
+
+fail() { notify_error "$1"; exit 1; }
+
+[ -x "$ELECTRON" ] || fail "Chybí binárka Electronu. Spusťte v $APP_DIR: node node_modules/electron/install.js"
+[ -f "$APP_DIR/src/renderer/dist/bundle.js" ] || fail "Chybí sestavené rozhraní. Spusťte v $APP_DIR: npm run build:renderer"
+
+# --------------------------------------------------------------------------
+# Sandbox Chromia na Ubuntu 24.04
+#
+# Jádro tu nedovolí neprivilegovaným procesům vytvořit user namespace. Electron
+# proto sáhne po pomocné binárce chrome-sandbox, která musí patřit rootovi
+# a mít 4755 – v node_modules to tak není. Z terminálu to obvykle projde
+# (shell běží v jiném profilu AppArmoru), z nabídky plochy ale plasmashell
+# předá potomkům svůj enforcing profil a aplikace se ukončí dřív, než otevře
+# okno. Tady na to přijdeme dřív a necháme rozhodnutí na uživateli.
+sandbox_broken() {
+  # Čteme přímo /proc – volání `sysctl` by pod cizím profilem AppArmoru
+  # nemuselo projít a detekce by tiše vyšla naprázdno.
+  local restrict=0
+  [ -r /proc/sys/kernel/apparmor_restrict_unprivileged_userns ] &&
+    restrict="$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo 0)"
+  [ "$restrict" = "1" ] || return 1
+  [ -f "$SANDBOX" ] || return 1
+  [ -u "$SANDBOX" ] && return 1     # setuid root – v pořádku
+  [ -e "$AA_PROFILE" ] && return 1  # profil AppArmor nainstalovaný – v pořádku
+  return 0
+}
+
+HOWTO="Trvalá oprava (jednorázově, vyžaduje heslo správce):
+
+  sudo install -m 644 $APP_DIR/packaging/shellsmith.apparmor /etc/apparmor.d/shellsmith
+  sudo apparmor_parser -r /etc/apparmor.d/shellsmith
+
+Profil povolí user namespace jen binárce Electronu v tomhle projektu."
+
+EXTRA=()
+# Volbu uživatele ctíme bez ohledu na to, jak detekce dopadne – kdyby se
+# nepovedla, aplikace by se jinak zase jen tiše neotevřela.
+if [ "${SHELLSMITH_NO_SANDBOX:-0}" = "1" ] || [ -f "$CONF_DIR/allow-no-sandbox" ]; then
+  EXTRA+=(--no-sandbox)
+elif sandbox_broken; then
+  if gui && command -v kdialog >/dev/null; then
+    if kdialog --title ShellSmith --warningyesno \
+      "Chromium se na tomhle systému nemůže zapouzdřit, takže se ShellSmith z nabídky nespustí.
+
+Spustit ho teď bez sandboxu? Aplikace poběží, ale přijde o jednu vrstvu izolace Chromia. Volba se zapamatuje.
+
+Odpovíte-li Ne, ukážu, jak to spravit natrvalo." >/dev/null 2>&1; then
+      mkdir -p "$CONF_DIR"
+      : > "$CONF_DIR/allow-no-sandbox"
+      EXTRA+=(--no-sandbox)
+    else
+      kdialog --title ShellSmith --msgbox "$HOWTO" >/dev/null 2>&1 || true
+      exit 1
+    fi
+  else
+    fail "Chromium se nemůže zapouzdřit a aplikace by se neotevřela.
+
+$HOWTO
+
+Rychlá náhrada bez hesla správce: spusťte s SHELLSMITH_NO_SANDBOX=1"
+  fi
 fi
 
 # Rodičovský proces (např. terminál uvnitř VS Code) může mít nastavené
 # ELECTRON_RUN_AS_NODE – to by Electron spustilo jen jako Node bez okna.
 exec env -u ELECTRON_RUN_AS_NODE -u ELECTRON_NO_ATTACH_CONSOLE \
-  "$ELECTRON" "$APP_DIR" "$@"
+  "$ELECTRON" "$APP_DIR" "${EXTRA[@]}" "$@"

@@ -1,7 +1,8 @@
 {
   "name": "shellsmith",
   "productName": "ShellSmith",
-  "version": "1.1.0",
+  "desktopName": "shellsmith.desktop",
+  "version": "1.1.2",
   "description": "Profesionální SSH/SFTP terminál s adresářovým stromem, taby a multi-session správou",
   "main": "src/main/main.js",
   "author": {
@@ -12,7 +13,10 @@
   "scripts": {
     "build:renderer": "node scripts/build-renderer.mjs",
     "watch:renderer": "node scripts/build-renderer.mjs --watch",
-    "postinstall": "electron-rebuild -f -w node-pty || true",
+    "postinstall": "electron-rebuild -f -w node-pty",
+    "test": "node --test test/*.test.cjs",
+    "test:smoke": "node scripts/smoke.mjs",
+    "check": "npm test && npm run build:renderer",
     "start": "npm run build:renderer && electron .",
     "dev": "npm run build:renderer && electron . --dev",
     "dist": "npm run build:renderer && electron-builder --linux AppImage deb",
@@ -30,10 +34,13 @@
     "ssh2": "^1.16.0"
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.7.1",
-    "electron": "37.2.1",
-    "electron-builder": "^25.1.8",
-    "esbuild": "^0.24.0"
+    "@electron/rebuild": "4.2.0",
+    "electron": "44.3.0",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.2"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   },
   "build": {
     "appId": "cz.belphareon.shellsmith",
@@ -47,12 +54,15 @@
       "src/**/*",
       "!src/renderer/js/**",
       "package.json",
+      "LICENSE",
+      "THIRD-PARTY-NOTICES.md",
       "!**/*.map"
     ],
     "extraMetadata": {
       "main": "src/main/main.js"
     },
     "linux": {
+      "syncDesktopName": true,
       "target": [
         "AppImage",
         "deb"
@@ -66,7 +76,7 @@
           "Name": "ShellSmith",
           "GenericName": "SSH a SFTP terminál",
           "Keywords": "ssh;sftp;terminal;konzole;server;",
-          "StartupWMClass": "ShellSmith"
+          "StartupWMClass": "shellsmith"
         }
       }
     },

@@ -706,3 +706,4 @@ input[type="number"].input { width: 100px; }
 
 .ico { display: block; }
 .icon-wrap { display: flex; }
+.boot-error { padding: 24px; color: var(--danger); white-space: pre-wrap; }

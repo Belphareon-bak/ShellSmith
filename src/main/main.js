@@ -4,6 +4,7 @@ const os = require('os');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const { spawn } = require('child_process');
+const { pathToFileURL } = require('url');
 const {
   app, BrowserWindow, ipcMain, dialog, clipboard, shell, nativeImage, Menu, nativeTheme
 } = require('electron');
@@ -126,6 +127,7 @@ function createWindow() {
     if (/^https?:/.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
 }
 
 /**
@@ -156,6 +158,7 @@ function send(channel, payload) {
 function handle(channel, fn) {
   ipcMain.handle(channel, async (_evt, ...args) => {
     try {
+      validateSender(_evt);
       return { ok: true, value: await fn(...args) };
     } catch (e) {
       const msg = e && e.message ? e.message : String(e);
@@ -163,6 +166,14 @@ function handle(channel, fn) {
       return { ok: false, error: msg };
     }
   });
+}
+
+function validateSender(evt) {
+  const contents = win && !win.isDestroyed() && win.webContents;
+  const trustedUrl = pathToFileURL(path.join(__dirname, '..', 'renderer', 'index.html')).href;
+  if (!contents || evt.sender !== contents || evt.senderFrame !== contents.mainFrame || evt.senderFrame.url !== trustedUrl) {
+    throw new Error('Nepovolený odesílatel IPC');
+  }
 }
 
 async function resolveAdapter(target) {
@@ -272,17 +283,13 @@ handle('files:writeText', async (target, p, text) => {
 });
 
 handle('files:transfer', async ({ srcTarget, srcPaths, dstTarget, dstDir, move }) => {
+  if (!Array.isArray(srcPaths) || !srcPaths.length || srcPaths.length > 10000 ||
+      !srcPaths.every(p => typeof p === 'string' && path.posix.isAbsolute(p) && !p.includes('\0')) ||
+      typeof dstDir !== 'string' || !path.posix.isAbsolute(dstDir) || dstDir.includes('\0')) {
+    throw new Error('Neplatné cesty přenosu');
+  }
   const src = await resolveAdapter(srcTarget);
   const dst = await resolveAdapter(dstTarget);
-  if (src === dst && move) {
-    // Přesun v rámci jednoho stroje zvládne rename, není třeba kopírovat data.
-    for (const p of srcPaths) {
-      const dest = dst.join(dstDir, dst.basename(p));
-      if (dest === p) continue;
-      await dst.rename(p, dest);
-    }
-    return { renamed: true };
-  }
   const settings = store.getSettings();
   const job = new TransferJob({
     src, srcPaths, dst, dstDir, move: !!move,
@@ -305,6 +312,7 @@ const DRAG_ICON = nativeImage.createFromDataURL(
 
 ipcMain.on('files:startDrag', async (evt, { target, paths }) => {
   try {
+    validateSender(evt);
     const a = await resolveAdapter(target);
     if (a.kind === 'local') {
       evt.sender.startDrag({ files: paths, icon: DRAG_ICON });

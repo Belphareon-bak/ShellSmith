@@ -2,6 +2,7 @@
 const { EventEmitter } = require('events');
 const { pipeline } = require('stream/promises');
 const { Transform } = require('stream');
+const { randomUUID } = require('crypto');
 
 let jobSeq = 0;
 
@@ -27,6 +28,9 @@ class TransferJob extends EventEmitter {
     this.bytesTotal = 0;
     this.bytesDone = 0;
     this.filesDone = 0;
+    this.filesSkipped = 0;
+    this.createdDirs = [];
+    this.completedSources = [];
     this.startedAt = 0;
     this.state = 'pending';
     this.error = null;
@@ -36,12 +40,14 @@ class TransferJob extends EventEmitter {
 
   cancel() {
     this.cancelled = true;
+    this.answer({ action: 'cancel' });
     if (this._activeSrc) { try { this._activeSrc.destroy(); } catch (_) {} }
     if (this._activeDst) { try { this._activeDst.destroy(); } catch (_) {} }
   }
 
   /** Renderer se ptá uživatele, co s kolizí názvů. */
   ask(question) {
+    if (this.cancelled) return Promise.resolve({ action: 'cancel' });
     return new Promise((resolve) => {
       this._resolveAsk = resolve;
       this.emit('ask', Object.assign({ jobId: this.id }, question));
@@ -60,6 +66,7 @@ class TransferJob extends EventEmitter {
       label: `${this.src.label} → ${this.dst.label}`,
       move: this.move,
       filesTotal: this.files.length, filesDone: this.filesDone,
+      filesSkipped: this.filesSkipped,
       bytesTotal: this.bytesTotal, bytesDone: this.bytesDone,
       currentFile: this.currentFile,
       speed: this.startedAt ? Math.round((this.bytesDone / elapsed) * 1000) : 0
@@ -83,20 +90,31 @@ class TransferJob extends EventEmitter {
       const name = this.src.basename(srcPath);
       const rel = relDir ? `${relDir}/${name}` : name;
       if (st.type === 'dir') {
-        this.dirs.push(rel);
+        this.dirs.push({ rel, srcPath, mode: st.mode & 0o777 });
         const entries = await this.src.list(srcPath);
         for (const e of entries) {
-          if (e.type === 'link' && e.realType === 'broken') continue;
+          if (e.name === '.' || e.name === '..' || e.name.includes('/')) throw new Error('Neplatný název ze souborového serveru');
           await walk(e.path, rel);
         }
       } else {
-        this.files.push({ srcPath, rel, size: st.size, mode: st.mode });
-        this.bytesTotal += st.size || 0;
+        if (!['file', 'link'].includes(st.type)) throw new Error(`Nepodporovaný typ souboru: ${srcPath}`);
+        const size = st.type === 'link' ? 0 : st.size;
+        this.files.push({ srcPath, rel, size, mode: st.mode, type: st.type, mtime: st.mtime });
+        this.bytesTotal += size || 0;
       }
     };
+    // Výběr rodiče a jeho potomka nesmí tutéž věc přenášet dvakrát.
+    const roots = [...new Set(this.srcPaths.map(p => this.src.join(p)))];
+    this.srcPaths = roots.filter(p => !roots.some(other => p !== other && p.startsWith(other.replace(/\/$/, '') + '/')));
     for (const p of this.srcPaths) {
-      try { await walk(p, ''); }
-      catch (e) { this.emit('warn', `${p}: ${e.message}`); }
+      if (this.src === this.dst) {
+        const canonical = await this.src.realpath(p);
+        const target = await this.dst.realpath(this.dst.join(this.dstDir, this.src.basename(p)));
+        if (canonical === target || target.startsWith(canonical.replace(/\/$/, '') + '/')) {
+          throw new Error('Nelze přenést položku samu na sebe ani do jejího podadresáře');
+        }
+      }
+      await walk(p, ''); // Chyba skenu zastaví přenos ještě před zápisem.
     }
     this.emitProgress(true);
   }
@@ -107,7 +125,8 @@ class TransferJob extends EventEmitter {
     if (this.conflictPolicy === 'rename') return { action: 'rename', path: await this.freeName(destPath) };
     const ans = await this.ask({ type: 'conflict', name, path: destPath });
     if (!ans) return { action: 'skip' };
-    if (ans.applyToAll) this.conflictPolicy = ans.action;
+    if (!['overwrite', 'skip', 'rename', 'cancel'].includes(ans.action)) throw new Error('Neplatná odpověď na kolizi');
+    if (ans.applyToAll && ans.action !== 'cancel') this.conflictPolicy = ans.action;
     if (ans.action === 'cancel') { this.cancel(); return { action: 'skip' }; }
     if (ans.action === 'rename') return { action: 'rename', path: await this.freeName(destPath) };
     return { action: ans.action };
@@ -133,25 +152,47 @@ class TransferJob extends EventEmitter {
       if (this.cancelled) throw new Error('Přenos zrušen');
       this.state = 'running';
 
-      for (const rel of this.dirs) {
-        if (this.cancelled) break;
-        await this.dst.mkdir(this.dst.join(this.dstDir, rel));
+      for (const dir of this.dirs) {
+        this.checkCancelled();
+        const p = this.dst.join(this.dstDir, dir.rel);
+        if (await this.dst.exists(p)) {
+          if ((await this.dst.stat(p)).type !== 'dir') throw new Error(`Cíl není adresář: ${p}`);
+        } else {
+          // Při plnění zůstává nový adresář soukromý; finální práva nastavíme nakonec.
+          await this.dst.mkdir(p, 0o700);
+          this.createdDirs.push({ path: p, mode: dir.mode });
+        }
       }
 
       for (const f of this.files) {
         if (this.cancelled) break;
         let destPath = this.dst.join(this.dstDir, f.rel);
+        let overwrite = false;
         this.currentFile = f.rel;
         this.emitProgress(true);
 
         if (await this.dst.exists(destPath)) {
           const res = await this.resolveConflict(destPath, f.rel);
           if (this.cancelled) break;
-          if (res.action === 'skip') { this.filesDone++; this.bytesDone += f.size || 0; this.emitProgress(true); continue; }
+          if (res.action === 'skip') { this.filesSkipped++; this.emitProgress(true); continue; }
           if (res.action === 'rename') destPath = res.path;
+          overwrite = res.action === 'overwrite';
         }
 
-        await this.copyFile(f, destPath);
+        this.checkCancelled();
+        if (this.move && this.src === this.dst) {
+          try {
+            await this.dst.publish(f.srcPath, destPath, overwrite);
+            this.bytesDone += f.size || 0;
+          } catch (e) {
+            if (e.code !== 'EXDEV') throw e;
+            await this.copyFile(f, destPath, overwrite);
+            this.completedSources.push(f);
+          }
+        } else {
+          await this.copyFile(f, destPath, overwrite);
+          if (this.move) this.completedSources.push(f);
+        }
         this.filesDone++;
         this.emitProgress(true);
       }
@@ -160,39 +201,70 @@ class TransferJob extends EventEmitter {
         this.state = 'cancelled';
       } else {
         if (this.move) await this.removeSources();
-        this.state = 'done';
+        this.state = this.filesSkipped ? 'partial' : 'done';
       }
     } catch (e) {
-      this.state = this.cancelled ? 'cancelled' : 'error';
+      this.state = this.cancelled ? 'cancelled' : this.filesDone ? 'partial' : 'error';
       this.error = e && e.message ? e.message : String(e);
+    }
+    // Režim adresářů obnovíme i při částečném přenosu; existující adresáře neměníme.
+    for (const dir of [...this.createdDirs].reverse()) {
+      try { await this.dst.chmod(dir.path, dir.mode); }
+      catch (e) { this.error = `Nelze nastavit práva ${dir.path}: ${e.message}`; if (this.state !== 'cancelled') this.state = 'partial'; }
     }
     this.emitProgress(true);
     this.emit('finish', this.snapshot());
     return this.snapshot();
   }
 
-  async copyFile(f, destPath) {
-    const rs = this.src.createReadStream(f.srcPath);
-    const ws = this.dst.createWriteStream(destPath, f.mode & 0o777);
-    this._activeSrc = rs; this._activeDst = ws;
-    const meter = new Transform({
-      transform: (chunk, _enc, cb) => {
-        this.bytesDone += chunk.length;
-        this.emitProgress(false);
-        cb(null, chunk);
-      }
-    });
+  checkCancelled() { if (this.cancelled) throw new Error('Přenos zrušen'); }
+
+  async copyFile(f, destPath, overwrite = false) {
+    const temp = this.dst.join(this.dst.dirname(destPath), `.shellsmith-${randomUUID()}.part`);
+    let bytes = 0;
     try {
-      await pipeline(rs, meter, ws);
+      if (f.type === 'link') {
+        await this.dst.symlink(await this.src.readlink(f.srcPath), temp);
+      } else {
+        const rs = this.src.createReadStream(f.srcPath);
+        this._activeSrc = rs;
+        const ws = this.dst.createWriteStream(temp, 0o600, 'wx');
+        this._activeDst = ws;
+        const meter = new Transform({
+          transform: (chunk, _enc, cb) => {
+            bytes += chunk.length;
+            this.bytesDone += chunk.length;
+            this.emitProgress(false);
+            cb(null, chunk);
+          }
+        });
+        await pipeline(rs, meter, ws);
+        if (bytes !== f.size) throw new Error(`Velikost zdroje se během přenosu změnila: ${f.srcPath}`);
+        await this.dst.chmod(temp, f.mode & 0o777);
+      }
+      this.checkCancelled();
+      await this.dst.publish(temp, destPath, overwrite);
     } finally {
+      this._activeSrc?.destroy(); this._activeDst?.destroy();
       this._activeSrc = null; this._activeDst = null;
+      try { if (await this.dst.exists(temp)) await this.dst.unlink(temp); }
+      catch (e) { this.emit('warn', `Nelze uklidit dočasný soubor ${temp}: ${e.message}`); }
     }
   }
 
   async removeSources() {
-    for (const p of this.srcPaths) {
-      try { await removeRecursive(this.src, p); }
-      catch (e) { this.emit('warn', `nelze smazat ${p}: ${e.message}`); }
+    for (const f of this.completedSources) {
+      this.checkCancelled();
+      const st = await this.src.stat(f.srcPath);
+      if (st.type !== f.type || (f.type === 'file' && (st.size !== f.size || st.mtime !== f.mtime))) {
+        throw new Error(`Zdroj se změnil, ponechán na místě: ${f.srcPath}`);
+      }
+      await this.src.unlink(f.srcPath);
+    }
+    for (const dir of [...this.dirs].reverse()) {
+      this.checkCancelled();
+      // Nikdy rekurzivně nemažeme přeskočené ani nově vzniklé soubory.
+      if ((await this.src.list(dir.srcPath)).length === 0) await this.src.rmdir(dir.srcPath);
     }
   }
 }
@@ -209,7 +281,7 @@ async function removeRecursive(adapter, p) {
 }
 
 class TransferQueue extends EventEmitter {
-  constructor() { super(); this.jobs = new Map(); }
+  constructor() { super(); this.jobs = new Map(); this.tail = Promise.resolve(); }
 
   add(job) {
     this.jobs.set(job.id, job);
@@ -218,9 +290,9 @@ class TransferQueue extends EventEmitter {
     job.on('warn', (w) => this.emit('warn', { id: job.id, message: w }));
     job.on('finish', (s) => {
       this.emit('finish', s);
-      setTimeout(() => this.jobs.delete(job.id), 30000);
+      setTimeout(() => this.jobs.delete(job.id), 30000).unref?.();
     });
-    job.run();
+    this.tail = this.tail.then(() => job.run());
     return job;
   }
 

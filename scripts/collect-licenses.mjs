@@ -38,7 +38,7 @@ function sourceOf(pkg) {
   return url.replace(/^git\+/, '').replace(/^git:\/\//, 'https://').replace(/\.git$/, '');
 }
 
-const out = execFileSync('npm', ['ls', '--prod', '--all', '--json'], { cwd: root, encoding: 'utf8' });
+const out = execFileSync('npm', ['ls', '--omit=dev', '--all', '--json'], { cwd: root, encoding: 'utf8' });
 const tree = JSON.parse(out || '{}');
 
 const found = new Map();

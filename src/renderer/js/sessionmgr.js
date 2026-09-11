@@ -243,7 +243,7 @@ export class SessionManagerPanel {
     f.username = el('input', { class: 'input', value: it.username, placeholder: 'root' });
 
     f.authType = el('select', { class: 'input' },
-      el('option', { value: 'agent', selected: it.authType === 'agent' }, 'SSH agent / výchozí klíče'),
+      el('option', { value: 'agent', selected: it.authType === 'agent' }, 'SSH agent'),
       el('option', { value: 'key', selected: it.authType === 'key' }, 'Soubor s privátním klíčem'),
       el('option', { value: 'password', selected: it.authType === 'password' }, 'Heslo'));
 

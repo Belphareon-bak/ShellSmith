@@ -12,7 +12,7 @@ Terminal=false
 Categories=Network;RemoteAccess;TerminalEmulator;
 Keywords=ssh;sftp;terminal;konzole;server;mobaxterm;putty;
 StartupNotify=true
-StartupWMClass=ShellSmith
+StartupWMClass=shellsmith
 MimeType=x-scheme-handler/ssh;
 Actions=NewLocal;NewSession;
 

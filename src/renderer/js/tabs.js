@@ -151,6 +151,7 @@ export class Tab {
         document.removeEventListener('mouseup', up);
         document.body.classList.remove('resizing-x', 'resizing-y');
         for (const p of this.panes()) p.scheduleFit();
+        this.manager.app.persistState();
       };
       document.addEventListener('mousemove', move);
       document.addEventListener('mouseup', up);
@@ -195,6 +196,7 @@ export class Tab {
     if (name != null) {
       this.customTitle = name.trim() || null;
       this.updateLabel();
+      this.manager.app.persistState();
     }
   }
 
@@ -283,6 +285,7 @@ export class TabManager {
     this.tabs.splice(before ? idx : idx + 1, 0, moved);
     this.strip.innerHTML = '';
     for (const t of this.tabs) this.strip.append(t.button);
+    this.app.persistState();
   }
 
   async closeTab(tab, skipConfirm = false) {

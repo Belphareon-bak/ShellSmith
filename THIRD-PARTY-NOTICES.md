@@ -32,7 +32,7 @@ po změně závislostí ho přegenerujte příkazem `npm run licenses`.
 
 | Knihovna | Verze | Licence | Zdroj |
 |---|---|---|---|
-| `electron` | 37.2.1 | MIT | [https://github.com/electron/electron](https://github.com/electron/electron) |
+| `electron` | 44.3.0 | MIT | [https://github.com/electron/electron](https://github.com/electron/electron) |
 
 Electron s sebou nese Chromium a Node.js, které stojí na dalších licencích
 (BSD-3-Clause a další). Jejich úplné znění najdete v balíčku v souborech

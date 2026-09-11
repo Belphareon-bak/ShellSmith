@@ -1,6 +1,6 @@
 # Architektura ShellSmithu
 
-**Verze:** 1.1.0
+**Verze:** 1.1.2
 
 Aplikace stojí na Electronu a drží se klasického rozdělení: **main proces** má
 přístup k systému (procesy, sokety, disk), **renderer** kreslí rozhraní a nemá
@@ -15,7 +15,7 @@ přímý přístup k ničemu jinému než k úzkému mostu v preloadu.
 │  store.js         nastavení, relace, tajemství, stav            │
 │  dragserver.js    jednorázová URL pro přetažení souboru ven     │
 └────────────────────────────┬───────────────────────────────────┘
-                             │ contextBridge („c3")
+                             │ contextBridge („smith“)
 ┌────────────────────────────┴───────────────────────────────────┐
 │  app.js           orchestrace, zkratky, stavový řádek, dialogy  │
 │  terminal.js      TerminalPane – xterm.js + chování myši        │
@@ -57,7 +57,7 @@ splní ve chvíli, kdy je relace opravdu přihlášená.
 ### Sledování adresáře přes OSC 7
 
 Po otevření shellu se odešle jednořádkový hook, který po každém promptu vypíše
-`OSC 7` s aktuálním adresářem, a hned za ním značka `ESC ] 777 ; c3 BEL`.
+`OSC 7` s aktuálním adresářem, a hned za ním značka `ESC ] 777 ; ss BEL`.
 Do jejího příchodu se výstup shellu jen sbírá do bufferu; pak se z něj vyřízne
 celý řádek s příkazem (hledá se podle názvu funkce, protože readline dlouhý
 řádek při zalomení překresluje) a teprve zbytek se pošle do terminálu. Uživatel
@@ -73,8 +73,16 @@ dvěma servery i kopii v rámci jednoho stroje — liší se jen dvojice adapté
 Přenos má dvě fáze: **sken** (sestaví plochý seznam souborů a celkovou velikost,
 aby šel ukázat smysluplný průběh) a **kopírování** (stream přes měřicí
 `Transform`). Kolize názvů se řeší dotazem do rendereru, odpověď může platit i
-pro všechny další. Přesun v rámci jednoho adaptéru se degraduje na `rename`,
-aby se data zbytečně nepřenášela.
+pro všechny další. Tentýž postup platí pro přesuny souborů v rámci adaptéru,
+které mohou použít přejmenování. U kopií se zapisuje výhradně vytvořený
+dočasný soubor a zveřejní se až po dokončení; pro existující vzdálený cíl je
+nutné rozšíření `posix-rename@openssh.com`. Bez něj se přepis odmítne.
+
+Fronta spouští přenosy postupně. Chyba skenu ukončí přenos před zápisem.
+Přeskočené soubory se nepočítají jako přenesené; stav `partial` odlišuje
+částečný výsledek od `done`. Mazání po přesunu se týká pouze dokončených
+souborů, jejichž metadata se nezměnila, a následně prázdných zdrojových
+adresářů. Zrušení vyřeší i čekající dialog kolize.
 
 ## Rozhraní
 
@@ -97,11 +105,26 @@ z `dragserver.js`, ze kterého Chromium obsah stáhne až ve chvíli puštění.
 
 ## Perzistence
 
+Stav verze 2 ukládá celý strom splitů, poměry a aktivní panel i tab.
+Starý formát s jediným `opts` na tab se načítá jako jeden list. Společné
+funkce jsou v `src/shared/layout.js`; při obnově je zápis stavu pozastaven.
+
 `store.js` zapisuje atomicky (zápis do `.tmp` a přejmenování) s právy `600`.
 Poškozený soubor se odloží stranou místo aby se ztratil. Tajemství jdou přes
 `safeStorage`; když šifrování není k dispozici, neuloží se nic.
 
 ## Testování
+
+`npm test` spouští regresní testy v `test/`, včetně SSH handshaku a přenosů
+proti dočasnému OpenSSH SFTP procesu za loopback SSH serverem. Testy IPC
+ověřují skutečný handler a odmítnutí cizího odesílatele. Renderer používá
+oddělený bootstrap `boot.js`, takže lze testovat jeho řídicí kód samostatně.
+
+`npm run test:smoke` spustí Electron dvakrát s dočasnou konfigurací a headless
+vykreslováním. Ověří skutečný lokální PTY, dva panely, jejich obnovu, poměr
+rozdělení i motiv. `-- --screenshots docs/screenshots` navíc aktualizuje snímek
+Classic. Test se nepřipojuje k uživatelským relacím. CI spouští testy, build,
+smoke a úplný npm audit.
 
 Aplikace se dá řídit zvenčí přes CDP — po spuštění s
 `--remote-debugging-port=<port>` je v rendereru dostupné `window.__shellsmith`

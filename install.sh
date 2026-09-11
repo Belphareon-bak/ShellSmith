@@ -35,10 +35,30 @@ sed "s|@EXEC@|$BIN_DIR/shellsmith|g" "$APP_DIR/packaging/shellsmith.desktop.in" 
 chmod +x "$APPS_DIR/shellsmith.desktop"
 echo "→ položka v nabídce: $APPS_DIR/shellsmith.desktop"
 
-command -v update-desktop-database >/dev/null && update-desktop-database "$APPS_DIR" 2>/dev/null || true
-command -v gtk-update-icon-cache  >/dev/null && gtk-update-icon-cache -f -t "$ICON_ROOT" 2>/dev/null || true
-command -v kbuildsycoca6 >/dev/null && kbuildsycoca6 --noincremental >/dev/null 2>&1 || \
-command -v kbuildsycoca5 >/dev/null && kbuildsycoca5 --noincremental >/dev/null 2>&1 || true
+# Obnova databází, ze kterých čtou nabídky aplikací. Bez toho se nová položka
+# v nabídce KDE neobjeví (nebo tam zůstane viset ta stará, která už nefunguje).
+if command -v update-desktop-database >/dev/null; then
+  update-desktop-database "$APPS_DIR" 2>/dev/null || true
+fi
+if command -v gtk-update-icon-cache >/dev/null; then
+  gtk-update-icon-cache -f -t "$ICON_ROOT" 2>/dev/null || true
+fi
+
+# Podle verze Plasmy se jmenuje jinak; projdeme, co je k dispozici.
+sycoca_done=0
+for kb in kbuildsycoca6 kbuildsycoca5; do
+  if command -v "$kb" >/dev/null; then
+    if "$kb" --noincremental >/dev/null 2>&1; then
+      echo "→ nabídka KDE obnovena ($kb)"
+      sycoca_done=1
+      break
+    fi
+  fi
+done
+if [ "$sycoca_done" -eq 0 ]; then
+  echo "  Pozn.: nepodařilo se obnovit nabídku KDE. Pokud se položka neobjeví,"
+  echo "         spusťte ručně 'kbuildsycoca5 --noincremental' nebo se odhlaste a přihlaste."
+fi
 
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;

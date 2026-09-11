@@ -245,6 +245,16 @@ kompatibilní s bash/zsh. U ostatních panel zůstane tam, kam ho nasměrujete r
 (sezení Wayland ho nemá). Spolehlivá cesta je zapnout lokální panel a přetáhnout
 soubory do něj, nebo použít *Stáhnout do…* z kontextového menu.
 
+**Položka v nabídce KDE chybí, nebo po kliknutí nic neudělá** — Plasma si drží
+vlastní databázi nabídky a sama ji neobnovuje. Spusťte `kbuildsycoca5
+--noincremental` (na Plasmě 6 `kbuildsycoca6`) nebo se odhlaste a přihlaste;
+`install.sh` to dělá sám a napíše, že nabídku obnovil.
+
+**Kliknutí v nabídce neotevře nové okno** — to je záměr: běží jen jedna
+instance, další spuštění vytáhne dopředu už otevřené okno. Nový terminál
+otevřete v aplikaci (`Ctrl+Shift+T`) nebo pravým klikem na položku v nabídce →
+*Nový lokální terminál*.
+
 **Připojení končí hláškou o uzavření před přihlášením** — server odmítl spojení
 ještě před ověřením; typicky jde o limit souběžných přihlášení. Zkuste to znovu,
 případně spusťte s `SHELLSMITH_DEBUG=1` a podívejte se na průběh.

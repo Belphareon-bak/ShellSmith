@@ -128,6 +128,23 @@ function createWindow() {
   });
 }
 
+/**
+ * Vytáhne okno dopředu. Druhé spuštění (kliknutí v nabídce na už běžící
+ * aplikaci) musí okno spolehlivě ukázat – samotné `focus()` KDE kvůli ochraně
+ * proti krádeži fokusu ignoruje a navenek to vypadá, že se nic nestalo.
+ */
+function raiseWindow() {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
+  win.setAlwaysOnTop(true);
+  win.show();
+  win.moveTop();
+  win.focus();
+  win.setAlwaysOnTop(false);
+  try { app.focus({ steal: true }); } catch (_) {}
+}
+
 function send(channel, payload) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
 }
@@ -425,8 +442,7 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', (_e, argv) => {
     if (!win) return;
-    if (win.isMinimized()) win.restore();
-    win.focus();
+    raiseWindow();
     sendCommand(commandFromArgv(argv));
   });
 

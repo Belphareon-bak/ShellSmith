@@ -4,7 +4,10 @@
   "version": "1.1.0",
   "description": "Profesionální SSH/SFTP terminál s adresářovým stromem, taby a multi-session správou",
   "main": "src/main/main.js",
-  "author": "Belphareon",
+  "author": {
+    "name": "Belphareon",
+    "email": "geofery.cz@gmail.com"
+  },
   "license": "MIT",
   "scripts": {
     "build:renderer": "node scripts/build-renderer.mjs",
@@ -12,8 +15,9 @@
     "postinstall": "electron-rebuild -f -w node-pty || true",
     "start": "npm run build:renderer && electron .",
     "dev": "npm run build:renderer && electron . --dev",
-    "dist": "npm run build:renderer && electron-builder --linux AppImage",
-    "dist:deb": "npm run build:renderer && electron-builder --linux deb"
+    "dist": "npm run build:renderer && electron-builder --linux AppImage deb",
+    "dist:deb": "npm run build:renderer && electron-builder --linux deb",
+    "licenses": "node scripts/collect-licenses.mjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
@@ -79,5 +83,23 @@
       ]
     },
     "npmRebuild": true
-  }
+  },
+  "homepage": "https://github.com/Belphareon-bak/ShellSmith",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Belphareon-bak/ShellSmith.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Belphareon-bak/ShellSmith/issues"
+  },
+  "keywords": [
+    "ssh",
+    "sftp",
+    "terminal",
+    "electron",
+    "xterm",
+    "mobaxterm",
+    "kde",
+    "linux"
+  ]
 }

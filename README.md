@@ -36,12 +36,9 @@ Odinstalace: `./uninstall.sh` (nastavení v `~/.config/shellsmith` zůstává).
 ### Distribuční balíčky
 
 ```bash
-npm run dist      # přenositelný AppImage do release/
+npm run dist      # AppImage i .deb do release/
+npm run dist:deb  # jen .deb
 ```
-
-Chcete-li i `.deb`, doplňte do `package.json` pole `homepage` a `author.email`
-(Debian je vyžaduje pro pole *Homepage* a *Maintainer* v control souboru)
-a spusťte `npm run dist:deb`.
 
 ---
 
@@ -263,4 +260,15 @@ případně spusťte s `SHELLSMITH_DEBUG=1` a podívejte se na průběh.
 
 ## Licence
 
-MIT
+ShellSmith je pod licencí **MIT** — úplné znění v souboru [LICENSE](LICENSE).
+Smíte ho používat, upravovat i šířit dál, včetně komerčního použití; jedinou
+podmínkou je zachovat v kopiích uvedení autorství a text licence. Software se
+poskytuje „jak stojí a leží", bez záruky.
+
+Copyright © 2026 Belphareon
+
+Do spustitelných balíčků se spolu s aplikací distribuují knihovny třetích
+stran (xterm.js, ssh2, node-pty, Electron a další). Jejich seznam včetně verzí
+a licencí je v [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) a dá se
+kdykoli přegenerovat příkazem `npm run licenses`. Všechny jsou pod
+permisivními licencemi slučitelnými s MIT.
